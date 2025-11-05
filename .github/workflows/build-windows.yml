@@ -31,14 +31,14 @@ jobs:
 
       - name: (Optional) Show PyQt plugins path
         run: |
-          python - <<'PY'
-          import os, importlib
-          try:
-              m = importlib.import_module('PyQt5')
-              print(os.path.join(os.path.dirname(m.__file__), 'Qt', 'plugins'))
-          except Exception as e:
-              print('PyQt5 not found or error:', e)
-          PY
+              python - <<PY
+            import os, importlib
+            try:
+                m = importlib.import_module('PyQt5')
+                print(os.path.join(os.path.dirname(m.__file__), 'Qt', 'plugins'))
+            except Exception as e:
+                print('PyQt5 not found or error:', e)
+            PY
 
       - name: Build with PyInstaller
         run: |
