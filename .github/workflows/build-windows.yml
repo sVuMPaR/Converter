@@ -32,27 +32,37 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install PyInstaller (user-scoped)
+      - name: Configure Python user paths
         run: |
-          where python
-          python --version
+          :: Получаем путь к пользовательской установке Python
+          set PY_USER_SITE=%APPDATA%\Python
+          set PY_SCRIPTS=%PY_USER_SITE%\Scripts
+          set PY_LIB=%PY_USER_SITE%\Python310\site-packages
 
-          :: Обновление pip
-          python -m pip install --upgrade pip --user
+          :: Добавляем в PATH для текущих и будущих шагов
+          echo %PY_SCRIPTS% >> %GITHUB_PATH%
+          echo %PY_LIB% >> %GITHUB_PYTHONPATH%  # Для импорта модулей
 
-          :: Установка PyInstaller
-          python -m pip install --upgrade pyinstaller --user
-
-          :: Добавление в PATH
-          echo "%APPDATA%\Python\Scripts" >> "%GITHUB_PATH%"
-          echo "%APPDATA%\Python\Python310\Scripts" >> "%GITHUB_PATH%"
-
-          :: Проверка
-          pyinstaller --version
+          :: Создаём/обновляем файл .pth для Python
+          echo %PY_LIB% > %PYTHONUSERBASE%\python310.pth
         shell: cmd
 
-      - name: Verify PyInstaller import
-        run: python -c "import pyinstaller; print('PyInstaller imported successfully')"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip --user
+          python -m pip install --upgrade pyinstaller --user
+          if exist requirements.txt (
+            python -m pip install -r requirements.txt --user
+          )
+        shell: cmd
+
+      - name: Verify PyInstaller installation
+        run: |
+          :: Проверяем наличие pyinstaller.exe
+          where pyinstaller
+
+          :: Проверяем импорт модуля (важно: регистр!)
+          python -c "import PyInstaller; print('PyInstaller imported successfully')"
         shell: cmd
 
       - name: Build executable
