@@ -11,27 +11,26 @@ on:
         required: true
 
 jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
 
-build-windows:
-  runs-on: windows-latest
-  timeout-minutes: 90
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Check main.py exists
+        shell: cmd
+        run: |
+          if not exist main.py (
+            echo Error: main.py not found!
+            exit /b 1
+          )
 
-    - name: Check main.py exists
-      shell: cmd
-      run: |
-        if not exist main.py (
-          echo Error: main.py not found!
-          exit /b 1
-        )
-
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
       - name: PyInstaller version
         run: pyinstaller --version
@@ -46,11 +45,12 @@ build-windows:
           pyinstaller --noconfirm --onefile --windowed --name converter main.py
 
       - name: List dist/ contents
-        run: ls -la dist/ || echo "dist/ is empty"
+        run: dir dist\ || echo "dist/ is empty"
+        shell: cmd
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: converter-windows
           path: dist/**
-          if-no-files-found:
+          if-no-files-found: error  # Добавлено значение
