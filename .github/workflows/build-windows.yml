@@ -1,54 +1,10 @@
-name: Build and release Windows executable
-
-on:
-  push:
-    branches: [ main ]
-    tags:
-      - 'v*.*.*'
-  workflow_dispatch:
-
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Check main.py exists
-        run: |
-          if [ ! -f main.py ]; then
-            echo "Error: main.py not found!"
-            exit 1
-          fi
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: PyInstaller version
-        run: pyinstaller --version
-
-      - name: Cache pip
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
-
-      # ... остальные шаги без изменений
-
   release:
     needs: build-windows
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    outputs:
+      exe_path: ${{ steps.find_exe.outputs.exe }}
 
     steps:
       - name: Download build artifact
@@ -68,8 +24,6 @@ jobs:
             exit 1
           fi
           echo "exe=$EXE! >> $GITHUB_OUTPUT
-        outputs:
-          exe: ${{ steps.find_exe.outputs.exe }}
 
       - name: Create GitHub Release
         id: create_release
