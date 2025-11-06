@@ -11,25 +11,27 @@ on:
         required: true
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    timeout-minutes: 60
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+build-windows:
+  runs-on: windows-latest
+  timeout-minutes: 90
 
-      - name: Check main.py exists
-        run: |
-          if [ ! -f "main.py" ]; then
-            echo "Error: main.py not found!"
-            exit 1
-          fi
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+    - name: Check main.py exists
+      shell: cmd
+      run: |
+        if not exist main.py (
+          echo Error: main.py not found!
+          exit /b 1
+        )
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
 
       - name: PyInstaller version
         run: pyinstaller --version
