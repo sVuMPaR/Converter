@@ -1,8 +1,10 @@
-name: Build Windows executable
+name: Build and release Windows executable
 
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 jobs:
@@ -29,21 +31,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
-      - name: (Optional) Show PyQt plugins path
+      - name: Detect PyQt5 plugins and build
+        shell: pwsh
         run: |
-              python - <<PY
-            import os, importlib
-            try:
-                m = importlib.import_module('PyQt5')
-                print(os.path.join(os.path.dirname(m.__file__), 'Qt', 'plugins'))
-            except Exception as e:
-                print('PyQt5 not found or error:', e)
-            PY
-
-      - name: Build with PyInstaller
-        run: |
-          # При необходимости добавьте --add-data "C:\path\to\plugins;PyQt5/Qt/plugins"
-          pyinstaller --noconfirm --onefile --windowed --name converter --icon assets/icon.ico main.py
+          $plugins = (& python -c "import os, importlib; \
+try: m=importlib.import_module('PyQt5'); print(os.path.join(os.path.dirname(m.__file__), 'Qt', 'plugins')) \
+except Exception: print('')")
+          $plugins = $plugins.Trim()
+          if ($plugins) {
+            Write-Host "Detected PyQt5 plugins: $plugins"
+            pyinstaller --noconfirm --onefile --windowed --name converter --add-data "$plugins;PyQt5/Qt/plugins" main.py
+          } else {
+            Write-Host "No PyQt5 plugins detected, running pyinstaller without --add-data"
+            pyinstaller --noconfirm --onefile --windowed --name converter main.py
+          }
 
       - name: Upload artifact (dist)
         uses: actions/upload-artifact@v4
@@ -51,9 +52,53 @@ jobs:
           name: converter-windows
           path: dist/**
 
-      - name: Upload artifact (logs)
+      - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: build/**
+
+  release:
+    needs: build-windows
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: converter-windows
+          path: release_artifact
+
+      - name: Find built exe
+        id: find_exe
+        run: |
+          set -e
+          shopt -s globstar || true
+          EXE=$(ls -1 release_artifact/**/converter*.exe 2>/dev/null | head -n1 || true)
+          if [ -z "$EXE" ]; then
+            echo "No executable found in release_artifact"
+            exit 1
+          fi
+          echo "exe=$EXE" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.find_exe.outputs.exe }}
+          asset_name: converter-${{ github.ref_name }}.exe
+          asset_content_type: application/octet-stream
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
