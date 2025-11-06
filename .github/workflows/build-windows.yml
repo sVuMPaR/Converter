@@ -34,10 +34,15 @@ jobs:
       - name: Detect PyQt5 plugins and build
         shell: pwsh
         run: |
-          $plugins = (& python -c "import os, importlib; \
-try: m=importlib.import_module('PyQt5'); print(os.path.join(os.path.dirname(m.__file__), 'Qt', 'plugins')) \
-except Exception: print('')")
-          $plugins = $plugins.Trim()
+          $py = @'
+import os, importlib
+try:
+    m = importlib.import_module("PyQt5")
+    print(os.path.join(os.path.dirname(m.__file__), "Qt", "plugins"))
+except Exception:
+    print("")
+'@
+          $plugins = (& python -c $py).Trim()
           if ($plugins) {
             Write-Host "Detected PyQt5 plugins: $plugins"
             pyinstaller --noconfirm --onefile --windowed --name converter --add-data "$plugins;PyQt5/Qt/plugins" main.py
