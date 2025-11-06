@@ -1,62 +1,75 @@
-build-windows:
-  runs-on: windows-latest
-  timeout-minutes: 120
+name: Build and Release Windows Executable
 
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag for release (e.g., v1.0.0)'
+        required: true
 
-    - name: Check main.py exists
-      shell: cmd
-      run: |
-        if not exist main.py (
-          echo Error: main.py not found!
-          exit /b 1
-        )
+jobs:  # ← добавлена обязательная секция
+  build-windows:  # ← теперь внутри jobs
+    runs-on: windows-latest
+    timeout-minutes: 120
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Debug environment (optional, for troubleshooting)
-      run: |
-        echo "Python: %PYTHON%"
-        where python
-        where pip
-      shell: cmd
+      - name: Check main.py exists
+        shell: cmd
+        run: |
+          if not exist main.py (
+            echo Error: main.py not found!
+            exit /b 1
+          )
 
-    - name: Install dependencies and PyInstaller
-      run: |
-        python -m pip install --upgrade pip
-        pip install --upgrade pyinstaller
-        if exist requirements.txt (
-          pip install -r requirements.txt
-        ) else (
-          echo "requirements.txt not found, skipping..."
-        )
-      shell: cmd
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-    - name: Verify PyInstaller is installed
-      run: python -c "import pyinstaller; print('PyInstaller imported successfully')"
-      shell: cmd
+      - name: Debug environment (optional, for troubleshooting)
+        run: |
+          echo "Python: %PYTHON%"
+          where python
+          where pip
+        shell: cmd
 
-    - name: PyInstaller version
-      run: pyinstaller --version
-      shell: cmd
+      - name: Install dependencies and PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade pyinstaller
+          if exist requirements.txt (
+            pip install -r requirements.txt
+          ) else (
+            echo "requirements.txt not found, skipping..."
+          )
+        shell: cmd
 
-    - name: Build executable
-      run: |
-        pyinstaller --noconfirm --onefile --windowed --name converter main.py
-      shell: cmd
+      - name: Verify PyInstaller is installed
+        run: python -c "import pyinstaller; print('PyInstaller imported successfully')"
+        shell: cmd
 
-    - name: List dist/ contents
-      run: dir dist\ || echo "dist/ is empty"
-      shell: cmd
+      - name: PyInstaller version
+        run: pyinstaller --version
+        shell: cmd
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: converter-windows
-        path: dist/**
-        if-no-files-found: error
+      - name: Build executable
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name converter main.py
+        shell: cmd
+
+      - name: List dist/ contents
+        run: dir dist\ || echo "dist/ is empty"
+        shell: cmd
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: converter-windows
+          path: dist/**
+          if-no-files-found: error
