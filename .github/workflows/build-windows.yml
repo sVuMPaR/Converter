@@ -31,9 +31,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
-      - name: Detect PyQt5 plugins and build
+      - name: Detect PyQt5 plugins and build (log to build/pyinstaller.log)
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+
           $py = @'
 import os, importlib
 try:
@@ -42,13 +44,14 @@ try:
 except Exception:
     print("")
 '@
+
           $plugins = (& python -c $py).Trim()
           if ($plugins) {
             Write-Host "Detected PyQt5 plugins: $plugins"
-            pyinstaller --noconfirm --onefile --windowed --name converter --add-data "$plugins;PyQt5/Qt/plugins" main.py
+            pyinstaller --noconfirm --onefile --windowed --name converter --add-data "$plugins;PyQt5/Qt/plugins" main.py 2>&1 | Tee-Object -FilePath build/pyinstaller.log
           } else {
             Write-Host "No PyQt5 plugins detected, running pyinstaller without --add-data"
-            pyinstaller --noconfirm --onefile --windowed --name converter main.py
+            pyinstaller --noconfirm --onefile --windowed --name converter main.py 2>&1 | Tee-Object -FilePath build/pyinstaller.log
           }
 
       - name: Upload artifact (dist)
@@ -56,13 +59,15 @@ except Exception:
         with:
           name: converter-windows
           path: dist/**
+          if-no-files-found: error
 
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
-          path: build/**
+          path: build/pyinstaller.log
+          if-no-files-found: ignore
 
   release:
     needs: build-windows
