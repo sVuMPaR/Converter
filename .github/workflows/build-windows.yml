@@ -1,41 +1,54 @@
-build-windows:
-  runs-on: windows-latest
-  timeout-minutes: 60
+name: Build and Release Windows Executable
 
-  steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag for release (e.g., v1.0.0)'
+        required: true
 
-    - name: Check main.py exists
-      run: |
-        if [ ! -f "main.py" ]; then
-          echo "Error: main.py not found!"
-          exit 1
-        fi
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: PyInstaller version
-      run: pyinstaller --version
+      - name: Check main.py exists
+        run: |
+          if [ ! -f "main.py" ]; then
+            echo "Error: main.py not found!"
+            exit 1
+          fi
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt pyinstaller
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-    - name: Build executable
-      run: |
-        pyinstaller --noconfirm --onefile --windowed --name converter main.py
+      - name: PyInstaller version
+        run: pyinstaller --version
 
-    - name: List dist/ contents
-      run: ls -la dist/ || echo "dist/ is empty"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: converter-windows
-        path: dist/**
-        if-no-files-found: error  # Явно укажет на проблему
+      - name: Build executable
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name converter main.py
+
+      - name: List dist/ contents
+        run: ls -la dist/ || echo "dist/ is empty"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: converter-windows
+          path: dist/**
+          if-no-files-found:
