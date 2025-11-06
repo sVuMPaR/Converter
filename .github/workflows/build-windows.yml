@@ -1,47 +1,33 @@
+
+name: Build and Release Windows Executable
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
 jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
   release:
     needs: build-windows
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    outputs:
-      exe_path: ${{ steps.find_exe.outputs.exe }}
 
     steps:
-      - name: Download build artifact
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: converter-windows
           path: release_artifact
-
-      - name: Find built exe
-        id: find_exe
-        run: |
-          set -e
-          shopt -s globstar || true
-          EXE=$(ls -1 release_artifact/**/converter*.exe 2>/dev/null | head -n1 || true)
-          if [ -z "$EXE" ]; then
-            echo "No executable found in release_artifact"
-            exit 1
-          fi
-          echo "exe=$EXE! >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload release asset
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ steps.find_exe.outputs.exe }}
-          asset_name: converter-${{ github.ref_name }}.exe
-          asset_content_type: application/octet-stream
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
