@@ -97,12 +97,17 @@ jobs:
           python -c "import pillow_heif; print('pillow-heif imported successfully')"
         shell: cmd
 
-
       - name: Debug Python paths and site-packages
         run: |
-          echo "PYTHONPATH: %PYTHONPATH%"
-          echo "GITHUB_PYTHONPATH: %GITHUB_PYTHONPATH%"
-          dir "%APPDATA%\Python\site-packages" /b /s | findstr /i "pillow-heif"
+          echo PYTHONPATH: %PYTHONPATH%
+          echo GITHUB_PYTHONPATH: %GITHUB_PYTHONPATH%
+          
+          :: Проверяем существование site-packages и ищем pillow-heif
+          if exist "%APPDATA%\Python\site-packages" (
+            dir "%APPDATA%\Python\site-packages" /b /s | findstr /i "pillow-heif"
+          ) else (
+            echo site-packages directory not found.
+          )
         shell: cmd
 
       - name: Build executable
@@ -110,7 +115,6 @@ jobs:
           :: Собираем исполняемый файл с помощью PyInstaller
           pyinstaller --noconfirm --onefile --windowed --name converter main.py
         shell: cmd
-
 
       - name: List dist/ contents
         run: dir dist\ || echo "dist/ is empty"
@@ -123,10 +127,12 @@ jobs:
           path: dist/**
           if-no-files-found: error
 
+
   release:
     needs: build-windows
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.tag || startsWith(github.ref, 'refs/tags/') }}
+
 
     steps:
       - name: Download artifact
