@@ -291,7 +291,7 @@ class MainWindow(QMainWindow):
 
     def add_files(self):
         files, _ = QFileDialog.getOpenFileNames(
-            (self, "Выбрать изображения", "", "Изображения (*.jpg *.jpeg *.png *.bmp *.heic *.heif)")
+            (self, "Выбрать изображения", "", "Изображения (*.jpg *.jpeg *.png *.bmp *.heic *.heif)"))
         if files:
             for file in files:
                 item = QListWidgetItem(Path(file).name)
