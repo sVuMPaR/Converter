@@ -1,6 +1,7 @@
 # main.py
 
 # Отладочное сообщение: показываем текущий PATH (важно для поиска DLL libheif)
+import os
 print("libheif DLL path:", os.environ.get("PATH"))
 
 import sys
@@ -26,6 +27,7 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QCheckBox,
 )
+
 
 class ImageConverter:
     """
@@ -71,6 +73,7 @@ class ImageConverter:
                 output_name = input_path.stem + ".jpg"
                 output_path = output_dir / output_name
 
+
                 if output_path.exists() and not self.overwrite:
                     i = 1
                     while True:
@@ -98,10 +101,12 @@ class ImageConverter:
             raise RuntimeError(f"Failed to convert {input_path}: {e}") from e
 
 
+
 class ConvertWorker(QObject):
     progress = pyqtSignal(int, int)  # current, total
     status = pyqtSignal(str)
     finished = pyqtSignal(int, int, list)  # success, total, errors
+
 
     def __init__(self, files: List[Path], output_dir: Optional[Path], quality: int, overwrite: bool):
         super().__init__()
@@ -110,6 +115,7 @@ class ConvertWorker(QObject):
         self.quality = quality
         self.overwrite = overwrite
         self._is_running = True
+
 
     def stop(self):
         self._is_running = False
@@ -133,6 +139,9 @@ class ConvertWorker(QObject):
             self.progress.emit(idx, total)
 
         self.finished.emit(success, total, errors)
+
+
+
 
 class FileListWidget(QListWidget):
     """
@@ -176,3 +185,6 @@ class FileListWidget(QListWidget):
         path = Path(path_str)
         if path.exists() and path.is_file():
             # avoid
+            item = QListWidgetItem(path.name)
+            item.setData(Qt.UserRole, path)
+            self.addItem(item)
