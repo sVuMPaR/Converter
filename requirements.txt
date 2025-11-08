@@ -1,3 +1,4 @@
 PyQt5>=5.15
+requests>=2.31.0
 Pillow>=9.0.0
 pillow-heif>=0.10.0
