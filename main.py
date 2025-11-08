@@ -1,10 +1,11 @@
-# main.py
 
 import os
 import logging
 import sys
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from typing import List, Optional  # ← добавлено
+
+from logging.handlers import RotatingFileHandler
 
 from PIL import Image, UnidentifiedImageError
 import pillow_heif
