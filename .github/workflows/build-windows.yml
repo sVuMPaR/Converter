@@ -24,7 +24,7 @@ jobs:
             Write-Error "File not found: main.py"
             exit 1
           }
-          Write-Host "✅ main.py found"
+          Write-Host "main.py found"
 
       - name: Verify Required Files
         shell: pwsh
@@ -36,7 +36,7 @@ jobs:
               exit 1
             }
           }
-          Write-Host "✅ All required files found"
+          Write-Host "All required files found"
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -70,9 +70,9 @@ jobs:
           python -m pip install --upgrade pip
           if exist requirements.txt (
             python -m pip install -r requirements.txt --user
-            echo "✅ Dependencies installed from requirements.txt"
+            echo "Dependencies installed from requirements.txt"
           ) else (
-            echo "❌ Error: requirements.txt not found in repository root!"
+            echo "Error: requirements.txt not found!"
             exit /b 1
           )
         shell: cmd
@@ -108,7 +108,7 @@ jobs:
         run: |
           pyinstaller --noconfirm --onefile --windowed --name converter main.py
           if not exist "dist\converter.exe" (
-            echo "❌ Build failed: dist\converter.exe not found!"
+            echo "Build failed: dist\converter.exe not found!"
             exit /b 1
           )
 
@@ -125,7 +125,7 @@ jobs:
           
           try {
             Compress-Archive -Path $source -DestinationPath $destination -Force
-            Write-Host "✅ Archive created: $destination"
+            Write-Host "Archive created: $destination"
           }
           catch {
             Write-Error "Failed to create ZIP: $($_.Exception.Message)"
@@ -146,10 +146,10 @@ jobs:
         run: |
           if (Test-Path "release_bundle.zip" -PathType Leaf) {
             $size = (Get-Item "release_bundle.zip").Length
-            Write-Host "✅ ZIP archive exists, size: $size bytes"
+            Write-Host "ZIP archive exists, size: $size bytes"
             Write-Host "   Full path: $(Resolve-Path "release_bundle.zip")"
           } else {
-            Write-Error "❌ ZIP archive not found!"
+            Write-Error "ZIP archive not found!"
             exit 1
           }
 
