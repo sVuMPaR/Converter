@@ -1,4 +1,8 @@
 # main.py
+
+# Отладочное сообщение: показываем текущий PATH (важно для поиска DLL libheif)
+print("libheif DLL path:", os.environ.get("PATH"))
+
 import sys
 from pathlib import Path
 from typing import List, Optional
