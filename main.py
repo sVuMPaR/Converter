@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
 )
 
 def setup_logging():
-    """Настраивает логирование в файл с ротацией."""
+    """Настраивает логирование в файл с ротацией (в папке с EXE)."""
     logger = logging.getLogger()
     
     # Если обработчики уже настроены — не делаем ничего
@@ -43,8 +43,13 @@ def setup_logging():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # Путь к логу в домашней директории пользователя
-    log_path = Path.home() / "converter.log"
+    # Путь к логу: папка с исполняемым файлом
+    if getattr(sys, 'frozen', False):  # PyInstaller: EXE запущен
+        exe_dir = Path(sys.executable).parent
+    else:  # Запуск из .py (разработка)
+        exe_dir = Path(__file__).parent
+
+    log_path = exe_dir / "converter.log"
 
     # Обработчик для файла
     try:
