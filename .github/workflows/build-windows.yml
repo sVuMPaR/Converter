@@ -34,31 +34,46 @@ jobs:
 
       - name: Configure Python user paths
         run: |
-          set PY_USER_SITE=%APPDATA%\Python
-          set PY_SCRIPTS=%PY_USER_SITE%\Scripts
-          set PY_LIB=%PY_USER_SITE%\Python310\site-packages
+          :: Получаем путь к пользовательской установке Python
+          set "PY_USER_SITE=%APPDATA%\Python"
+          set "PY_SCRIPTS=%PY_USER_SITE%\Scripts"
+          set "PY_LIB=%PY_USER_SITE%\Python310\site-packages"
 
-          echo %PY_SCRIPTS% >> %GITHUB_PATH%
-          echo %PY_LIB% >> %GITHUB_PYTHONPATH%
-          echo %PY_LIB% > %PYTHONUSERBASE%\python310.pth
+          :: Добавляем в PATH для текущих и будущих шагов
+          echo "%PY_SCRIPTS%" >> %GITHUB_PATH%
+          echo "%PY_LIB%" >> %GITHUB_PYTHONPATH%
+
+
+          :: Создаём/обновляем файл .pth для Python
+          echo "%PY_LIB%" > "%PYTHONUSERBASE%\python310.pth"
         shell: cmd
 
       - name: Install libheif via vcpkg
         run: |
+          :: Устанавливаем vcpkg
           git clone https://github.com/microsoft/vcpkg.git
           cd vcpkg
           .\bootstrap-vcpkg.bat
+          :: Устанавливаем libheif
           vcpkg install libheif:x64-windows
+          :: Добавляем путь к бинарным файлам в PATH
           echo "C:\vcpkg\installed\x64-windows\bin" >> %GITHUB_PATH%
         shell: cmd
 
       - name: Install dependencies
         run: |
+          :: Обновляем pip (без --user, т.к. это базовая утилита)
           python -m pip install --upgrade pip
+
+
+          :: Устанавливаем PyInstaller в пользовательскую директорию
           python -m pip install --upgrade pyinstaller --user
+
+
+          :: Если есть requirements.txt — устанавливаем зависимости из него
           if exist requirements.txt (
             python -m pip install -r requirements.txt --user
-            echo "Dependencies installed."
+            echo "Dependencies from requirements.txt installed."
           ) else (
             echo "Error: requirements.txt not found!"
             exit /b 1
@@ -67,10 +82,20 @@ jobs:
 
       - name: Verify module imports
         run: |
+          :: Проверяем наличие pyinstaller
           where pyinstaller
-          python -c "import PyInstaller; print('PyInstaller OK')"
-          python -c "from PIL import Image; print('Pillow OK')"
-          python -c "import pillow_heif; print('pillow-heif OK')"
+
+          :: Проверяем импорт ключевых модулей
+          python -c "import PyInstaller; print('PyInstaller imported successfully')"
+          python -c "from PIL import Image; print('Pillow imported successfully')"
+          python -c "import pillow_heif; print('pillow-heif imported successfully')"
+        shell: cmd
+
+      - name: Debug Python paths and site-packages
+        run: |
+          echo "PYTHONPATH: %PYTHONPATH%"
+          echo "GITHUB_PYTHONPATH: %GITHUB_PYTHONPATH%"
+          dir "%APPDATA%\Python\site-packages" /b /s | findstr /i "pillow-heif"
         shell: cmd
 
       - name: Build executable
