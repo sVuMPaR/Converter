@@ -16,18 +16,25 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Check Required Files
+      - name: Debug: Check Files
+        shell: pwsh
+        run: Get-ChildItem -File
+
+
+      - name: Verify Required Files
         shell: pwsh
         run: |
-          $requiredFiles = @("main.py", "changelog.txt")
-          foreach ($file in $requiredFiles) {
-            if (-not (Test-Path -Path $file -PathType Leaf)) {
-              Write-Error "❌ ERROR: File not found - $file"
+          $files = @("main.py", "changelog.txt")
+          foreach ($f in $files) {
+            if (-not (Test-Path $f -PathType Leaf)) {
+              Write-Error "File missing: $f"
               exit 1
             }
           }
-          Write-Host "✅ All required files found"
+          Write-Host "All files are present"
 
       # ... остальные шаги сборки ...
 
