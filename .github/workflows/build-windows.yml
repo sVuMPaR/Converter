@@ -34,37 +34,52 @@ jobs:
 
       - name: Configure Python user paths
         run: |
-          if not exist "%APPDATA%\Python! mkdir "%APPDATA%\Python"
+          :: Создаём директорию Python в AppData, если её нет
+          if not exist "%APPDATA%\Python" (
+            mkdir "%APPDATA%\Python"
+          )
+          
+          :: Настраиваем пути к пользовательским директориям Python
           set "PY_USER_SITE=%APPDATA%\Python"
           set "PY_SCRIPTS=%PY_USER_SITE%\Scripts"
           set "PY_LIB=%PY_USER_SITE%\Python310\site-packages"
-
-          echo "%PY_SCRIPTS%" >> %GITHUB_PATH%
-          echo "%PY_LIB%" >> %GITHUB_PYTHONPATH%
-
+          
+          :: Добавляем пути в переменные окружения для последующих шагов
+          echo "%PY_SCRIPTS%" >> "%GITHUB_PATH%"
+          echo "%PY_LIB%" >> "%GITHUB_PYTHONPATH%"
+          
+          :: Создаём .pth файл для корректного поиска модулей
           echo "%PY_LIB%" > "%PYTHONUSERBASE%\python310.pth"
         shell: cmd
 
       - name: Install libheif via vcpkg
         run: |
+          :: Клонируем репозиторий vcpkg
           git clone https://github.com/microsoft/vcpkg.git
           cd vcpkg
+          
+          :: Запускаем bootstrap для настройки vcpkg
           .\bootstrap-vcpkg.bat
+          
+          :: Устанавливаем библиотеку libheif для Windows x64
           vcpkg install libheif:x64-windows
-          echo "C:\vcpkg\installed\x64-windows\bin" >> %GITHUB_PATH%
+          
+          :: Добавляем путь к DLL в PATH для последующих шагов
+          echo "C:\vcpkg\installed\x64-windows\bin" >> "%GITHUB_PATH%"
         shell: cmd
 
       - name: Install dependencies
         run: |
+          :: Обновляем pip до последней версии
           python -m pip install --upgrade pip
-
-
+          
+          :: Устанавливаем PyInstaller в пользовательскую директорию
           python -m pip install --upgrade pyinstaller --user
-
-
+          
+          :: Проверяем наличие requirements.txt и устанавливаем зависимости
           if exist requirements.txt (
             python -m pip install -r requirements.txt --user
-            echo "Dependencies from requirements.txt installed."
+            echo "Dependencies from requirements.txt installed successfully."
           ) else (
             echo "Error: requirements.txt not found!"
             exit /b 1
@@ -73,12 +88,15 @@ jobs:
 
       - name: Verify module imports
         run: |
+          :: Проверяем доступность pyinstaller
           where pyinstaller
-
+          
+          :: Проверяем импорт ключевых модулей Python
           python -c "import PyInstaller; print('PyInstaller imported successfully')"
           python -c "from PIL import Image; print('Pillow imported successfully')"
           python -c "import pillow_heif; print('pillow-heif imported successfully')"
         shell: cmd
+
 
       - name: Debug Python paths and site-packages
         run: |
@@ -89,8 +107,10 @@ jobs:
 
       - name: Build executable
         run: |
+          :: Собираем исполняемый файл с помощью PyInstaller
           pyinstaller --noconfirm --onefile --windowed --name converter main.py
         shell: cmd
+
 
       - name: List dist/ contents
         run: dir dist\ || echo "dist/ is empty"
