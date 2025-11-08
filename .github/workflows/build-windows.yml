@@ -24,7 +24,7 @@ jobs:
             Write-Error "File not found: main.py"
             exit 1
           }
-          Write-Host "✅ main.py found"
+          Write-Host "main.py found"
 
       - name: Verify Required Files
         shell: pwsh
@@ -36,7 +36,7 @@ jobs:
               exit 1
             }
           }
-          Write-Host "✅ All required files found"
+          Write-Host "All required files found"
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -68,14 +68,17 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --upgrade pyinstaller --user
           if exist requirements.txt (
             python -m pip install -r requirements.txt --user
-            echo "Dependencies from requirements.txt installed successfully."
-          ) else (
-            echo "Error: requirements.txt not found!"
-            exit /b 1
           )
+          python -m pip install pyinstaller --user
+          echo "Dependencies installed"
+        shell: cmd
+
+      - name: Verify PyInstaller is installed
+        run: |
+          where pyinstaller
+          pyinstaller --version
         shell: cmd
 
       - name: Verify module imports
@@ -97,15 +100,26 @@ jobs:
           )
         shell: cmd
 
+      - name: Verify installed packages
+        run: |
+          python -c "import requests; print(f'requests {requests.__version__} imported successfully')"
+          python -c "from PIL import Image; print('Pillow imported successfully')"
+          python -c "import pillow_heif; print('pillow-heif imported successfully')"
+        shell: cmd
 
       - name: Build Executable
         shell: cmd
         run: |
-           pyinstaller --noconfirm --onefile --windowed --name converter main.py
-           if not exist "dist\converter.exe" (
-             echo "❌ Build failed: dist\converter.exe not found!"
+          :: Используем python -m PyInstaller (надёжнее, чем pyinstaller)
+          python -m PyInstaller --noconfirm --onefile --windowed --name converter main.py
+          
+          :: Проверяем результат
+          if not exist "dist\converter.exe" (
+            echo "Build failed: dist\converter.exe not found!"
             exit /b 1
-           )
+          ) else (
+            echo "Executable created: dist\converter.exe"
+          )
 
       - name: Create ZIP archive (PowerShell)
         shell: pwsh
@@ -120,7 +134,7 @@ jobs:
           
           try {
             Compress-Archive -Path $source -DestinationPath $destination -Force
-            Write-Host "✅ Archive created: $destination"
+            Write-Host "Archive created: $destination"
           }
           catch {
             Write-Error "Failed to create ZIP: $($_.Exception.Message)"
@@ -141,10 +155,10 @@ jobs:
         run: |
           if (Test-Path "release_bundle.zip" -PathType Leaf) {
             $size = (Get-Item "release_bundle.zip").Length
-            Write-Host "✅ ZIP archive exists, size: $size bytes"
+            Write-Host "ZIP archive exists, size: $size bytes"
             Write-Host "   Full path: $(Resolve-Path "release_bundle.zip")"
           } else {
-            Write-Error "❌ ZIP archive not found!"
+            Write-Error "ZIP archive not found!"
             exit 1
           }
 
