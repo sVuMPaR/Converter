@@ -65,16 +65,21 @@ jobs:
           echo "C:\vcpkg\installed\x64-windows\bin" >> "%GITHUB_PATH%"
         shell: cmd
 
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           if exist requirements.txt (
             python -m pip install -r requirements.txt --user
-            echo "Dependencies installed from requirements.txt"
-          ) else (
-            echo "Error: requirements.txt not found!"
-            exit /b 1
           )
+          python -m pip install pyinstaller --user
+          echo "Dependencies installed"
+        shell: cmd
+
+      - name: Verify PyInstaller is installed
+        run: |
+          where pyinstaller
+          pyinstaller --version
         shell: cmd
 
       - name: Verify module imports
@@ -106,10 +111,17 @@ jobs:
       - name: Build Executable
         shell: cmd
         run: |
-          pyinstaller --noconfirm --onefile --windowed --name converter main.py
+          set "PYINSTALLER_SCRIPT=%APPDATA%\Python\Scripts\pyinstaller.exe"
+          if not exist "%PYINSTALLER_SCRIPT%" (
+            echo "PyInstaller not found at %PYINSTALLER_SCRIPT%"
+            exit /b 1
+          )
+          "%PYINSTALLER_SCRIPT%" --noconfirm --onefile --windowed --name converter main.py
           if not exist "dist\converter.exe" (
             echo "Build failed: dist\converter.exe not found!"
             exit /b 1
+          ) else (
+            echo "Executable created: dist\converter.exe"
           )
 
       - name: Create ZIP archive (PowerShell)
