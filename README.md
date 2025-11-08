@@ -1,2 +1,2 @@
 # Converter
-Convert files to *jpg
+Convert image files to *jpg
