@@ -14,16 +14,6 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-
-      
-      - name: Check .gitignore
-        shell: pwsh
-        run: |
-          if (Test-Path ".gitignore") {
-            Get-Content ".gitignore" | Where-Object { $_ -match "main.py|changelog.txt" }
-          } else {
-            Write-Host ".gitignore not found"
-          }
     
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,6 +23,15 @@ jobs:
       - name: Debug - Check Files
         shell: pwsh
         run: Get-ChildItem -File
+
+      - name: Check .gitignore
+        shell: pwsh
+        run: |
+          if (Test-Path ".gitignore") {
+            Get-Content ".gitignore" | Where-Object { $_ -match "main.py|changelog.txt" }
+          } else {
+            Write-Host ".gitignore not found"
+          }
 
 
       - name: Verify Required Files
