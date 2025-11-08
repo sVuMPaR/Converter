@@ -44,7 +44,14 @@ jobs:
           echo %PY_LIB% >> %GITHUB_PYTHONPATH%  # Для импорта модулей
 
           :: Создаём/обновляем файл .pth для Python
+          :: Примечание: %PYTHONUSERBASE% обычно равен %APPDATA%\Python
           echo %PY_LIB% > %PYTHONUSERBASE%\python310.pth
+        shell: cmd
+
+      - name: Install system dependencies (libheif)
+        run: |
+          :: Устанавливаем libheif через Chocolatey — требуется для pillow-heif
+          choco install libheif --yes
         shell: cmd
 
       - name: Install dependencies
@@ -58,19 +65,29 @@ jobs:
           :: Если есть requirements.txt — устанавливаем зависимости из него
           if exist requirements.txt (
             python -m pip install -r requirements.txt --user
+            echo "Dependencies from requirements.txt installed."
           ) else (
-            echo "requirements.txt not found, skipping..."
+            echo "Error: requirements.txt not found!"
+            exit /b 1
           )
         shell: cmd
 
-
-      - name: Verify PyInstaller installation
+      - name: Verify module imports
         run: |
-          :: Проверяем наличие pyinstaller.exe
+          :: Проверяем наличие pyinstaller
           where pyinstaller
 
-          :: Проверяем импорт модуля (важно: регистр!)
+          :: Проверяем импорт ключевых модулей
           python -c "import PyInstaller; print('PyInstaller imported successfully')"
+          python -c "from PIL import Image; print('Pillow imported successfully')"
+          python -c "import pillow_heif; print('pillow-heif imported successfully')"
+        shell: cmd
+
+      - name: Debug Python paths and site-packages
+        run: |
+          echo "PYTHONPATH: %PYTHONPATH%"
+          echo "GITHUB_PYTHONPATH: %GITHUB_PYTHONPATH%"
+          dir %APPDATA%\Python\site-packages /b /s | findstr /i "pillow-heif"
         shell: cmd
 
       - name: Build executable
@@ -93,6 +110,7 @@ jobs:
     needs: build-windows
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.tag || startsWith(github.ref, 'refs/tags/') }}
+
 
     steps:
       - name: Download artifact
