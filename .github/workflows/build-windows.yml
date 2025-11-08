@@ -19,11 +19,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check main.py exists
+      - name: Check main.py and changelog.txt exist
         shell: cmd
         run: |
           if not exist main.py (
             echo Error: main.py not found!
+            exit /b 1
+          )
+          if not exist changelog.txt (
+            echo Error: changelog.txt not found!
             exit /b 1
           )
 
@@ -34,49 +38,30 @@ jobs:
 
       - name: Configure Python user paths
         run: |
-          :: Создаём директорию Python в AppData, если её нет
           if not exist "%APPDATA%\Python" (
             mkdir "%APPDATA%\Python"
           )
-          
-          :: Настраиваем пути к пользовательским директориям Python
           set "PY_USER_SITE=%APPDATA%\Python"
           set "PY_SCRIPTS=%PY_USER_SITE%\Scripts"
           set "PY_LIB=%PY_USER_SITE%\Python310\site-packages"
-          
-          :: Добавляем пути в переменные окружения для последующих шагов
           echo "%PY_SCRIPTS%" >> "%GITHUB_PATH%"
           echo "%PY_LIB%" >> "%GITHUB_PYTHONPATH%"
-          
-          :: Создаём .pth файл для корректного поиска модулей
           echo "%PY_LIB%" > "%PYTHONUSERBASE%\python310.pth"
         shell: cmd
 
       - name: Install libheif via vcpkg
         run: |
-          :: Клонируем репозиторий vcpkg
           git clone https://github.com/microsoft/vcpkg.git
           cd vcpkg
-          
-          :: Запускаем bootstrap для настройки vcpkg
           .\bootstrap-vcpkg.bat
-          
-          :: Устанавливаем библиотеку libheif для Windows x64
           vcpkg install libheif:x64-windows
-          
-          :: Добавляем путь к DLL в PATH для последующих шагов
           echo "C:\vcpkg\installed\x64-windows\bin" >> "%GITHUB_PATH%"
         shell: cmd
 
       - name: Install dependencies
         run: |
-          :: Обновляем pip до последней версии
           python -m pip install --upgrade pip
-          
-          :: Устанавливаем PyInstaller в пользовательскую директорию
           python -m pip install --upgrade pyinstaller --user
-          
-          :: Проверяем наличие requirements.txt и устанавливаем зависимости
           if exist requirements.txt (
             python -m pip install -r requirements.txt --user
             echo "Dependencies from requirements.txt installed successfully."
@@ -88,10 +73,7 @@ jobs:
 
       - name: Verify module imports
         run: |
-          :: Проверяем доступность pyinstaller
           where pyinstaller
-          
-          :: Проверяем импорт ключевых модулей Python
           python -c "import PyInstaller; print('PyInstaller imported successfully')"
           python -c "from PIL import Image; print('Pillow imported successfully')"
           python -c "import pillow_heif; print('pillow-heif imported successfully')"
@@ -101,8 +83,6 @@ jobs:
         run: |
           echo PYTHONPATH: %PYTHONPATH%
           echo GITHUB_PYTHONPATH: %GITHUB_PYTHONPATH%
-          
-          :: Проверяем существование site-packages и ищем pillow-heif
           if exist "%APPDATA%\Python\site-packages" (
             dir "%APPDATA%\Python\site-packages" /b /s | findstr /i "pillow-heif"
           ) else (
@@ -112,8 +92,12 @@ jobs:
 
       - name: Build executable
         run: |
-          :: Собираем исполняемый файл с помощью PyInstaller
           pyinstaller --noconfirm --onefile --windowed --name converter main.py
+        shell: cmd
+
+      - name: Copy changelog.txt to dist
+        run: |
+          copy changelog.txt dist\changelog.txt
         shell: cmd
 
       - name: List dist/ contents
@@ -127,12 +111,10 @@ jobs:
           path: dist/**
           if-no-files-found: error
 
-
   release:
     needs: build-windows
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.tag || startsWith(github.ref, 'refs/tags/') }}
-
 
     steps:
       - name: Download artifact
@@ -141,11 +123,22 @@ jobs:
           name: converter-windows
           path: release_artifact
 
+      - name: Create ZIP archive with converter.exe and changelog.txt
+        run: |
+          # Создаём архив
+          zip release_bundle.zip \
+            release_artifact/converter.exe \
+            release_artifact/changelog.txt
+          
+          # Проверяем содержимое
+          unzip -l release_bundle.zip
+        shell: bash
+
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.event.inputs.tag || github.ref_name }}
           name: Release ${{ github.event.inputs.tag || github.ref_name }}
-          artifacts: release_artifact/**
+          artifacts: release_bundle.zip  # Загружаем только ZIP-архив
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
