@@ -7,25 +7,36 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag for release (e.g., v1.0.0)'
+        description: 'Tag for release (e.g., v1.0.2)'
         required: true
 
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 120
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Check main.py exists
-        shell: cmd
+      - name: Verify main.py exists
+        shell: pwsh
         run: |
-          if not exist main.py (
-            echo Error: main.py not found!
-            exit /b 1
-          )
+          if (-not (Test-Path -Path "main.py" -PathType Leaf)) {
+            Write-Error "File not found: main.py"
+            exit 1
+          }
+          Write-Host "✅ main.py found"
+
+      - name: Verify Required Files
+        shell: pwsh
+        run: |
+          $files = @("main.py", "changelog.txt")
+          foreach ($f in $files) {
+            if (-not (Test-Path $f -PathType Leaf)) {
+              Write-Error "File missing: $f"
+              exit 1
+            }
+          }
+          Write-Host "✅ All required files found"
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -34,49 +45,30 @@ jobs:
 
       - name: Configure Python user paths
         run: |
-          :: Создаём директорию Python в AppData, если её нет
           if not exist "%APPDATA%\Python" (
             mkdir "%APPDATA%\Python"
           )
-          
-          :: Настраиваем пути к пользовательским директориям Python
           set "PY_USER_SITE=%APPDATA%\Python"
           set "PY_SCRIPTS=%PY_USER_SITE%\Scripts"
           set "PY_LIB=%PY_USER_SITE%\Python310\site-packages"
-          
-          :: Добавляем пути в переменные окружения для последующих шагов
           echo "%PY_SCRIPTS%" >> "%GITHUB_PATH%"
           echo "%PY_LIB%" >> "%GITHUB_PYTHONPATH%"
-          
-          :: Создаём .pth файл для корректного поиска модулей
           echo "%PY_LIB%" > "%PYTHONUSERBASE%\python310.pth"
         shell: cmd
 
       - name: Install libheif via vcpkg
         run: |
-          :: Клонируем репозиторий vcpkg
           git clone https://github.com/microsoft/vcpkg.git
           cd vcpkg
-          
-          :: Запускаем bootstrap для настройки vcpkg
           .\bootstrap-vcpkg.bat
-          
-          :: Устанавливаем библиотеку libheif для Windows x64
           vcpkg install libheif:x64-windows
-          
-          :: Добавляем путь к DLL в PATH для последующих шагов
           echo "C:\vcpkg\installed\x64-windows\bin" >> "%GITHUB_PATH%"
         shell: cmd
 
       - name: Install dependencies
         run: |
-          :: Обновляем pip до последней версии
           python -m pip install --upgrade pip
-          
-          :: Устанавливаем PyInstaller в пользовательскую директорию
           python -m pip install --upgrade pyinstaller --user
-          
-          :: Проверяем наличие requirements.txt и устанавливаем зависимости
           if exist requirements.txt (
             python -m pip install -r requirements.txt --user
             echo "Dependencies from requirements.txt installed successfully."
@@ -88,10 +80,7 @@ jobs:
 
       - name: Verify module imports
         run: |
-          :: Проверяем доступность pyinstaller
           where pyinstaller
-          
-          :: Проверяем импорт ключевых модулей Python
           python -c "import PyInstaller; print('PyInstaller imported successfully')"
           python -c "from PIL import Image; print('Pillow imported successfully')"
           python -c "import pillow_heif; print('pillow-heif imported successfully')"
@@ -101,8 +90,6 @@ jobs:
         run: |
           echo PYTHONPATH: %PYTHONPATH%
           echo GITHUB_PYTHONPATH: %GITHUB_PYTHONPATH%
-          
-          :: Проверяем существование site-packages и ищем pillow-heif
           if exist "%APPDATA%\Python\site-packages" (
             dir "%APPDATA%\Python\site-packages" /b /s | findstr /i "pillow-heif"
           ) else (
@@ -110,23 +97,56 @@ jobs:
           )
         shell: cmd
 
-      - name: Build executable
+
+      - name: Build Executable
+        shell: cmd
         run: |
-          :: Собираем исполняемый файл с помощью PyInstaller
-          pyinstaller --noconfirm --onefile --windowed --name converter main.py
-        shell: cmd
+           pyinstaller --noconfirm --onefile --windowed --name converter main.py
+           if not exist "dist\converter.exe" (
+             echo "❌ Build failed: dist\converter.exe not found!"
+            exit /b 1
+           )
 
-      - name: List dist/ contents
-        run: dir dist\ || echo "dist/ is empty"
-        shell: cmd
+      - name: Create ZIP archive (PowerShell)
+        shell: pwsh
+        run: |
+          $source = "dist/converter.exe"
+          $destination = "release_bundle.zip"
+          
+          if (-not (Test-Path -Path $source -PathType Leaf)) {
+            Write-Error "File not found: $source"
+            exit 1
+          }
+          
+          try {
+            Compress-Archive -Path $source -DestinationPath $destination -Force
+            Write-Host "✅ Archive created: $destination"
+          }
+          catch {
+            Write-Error "Failed to create ZIP: $($_.Exception.Message)"
+            exit 1
+          }
 
-      - name: Upload artifact
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: converter-windows
-          path: dist/**
+          path: release_bundle.zip
           if-no-files-found: error
 
+
+      - name: Debug - Verify ZIP was created
+        shell: pwsh
+        run: |
+          if (Test-Path "release_bundle.zip" -PathType Leaf) {
+            $size = (Get-Item "release_bundle.zip").Length
+            Write-Host "✅ ZIP archive exists, size: $size bytes"
+            Write-Host "   Full path: $(Resolve-Path "release_bundle.zip")"
+          } else {
+            Write-Error "❌ ZIP archive not found!"
+            exit 1
+          }
 
   release:
     needs: build-windows
@@ -135,7 +155,7 @@ jobs:
 
 
     steps:
-      - name: Download artifact
+      - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
           name: converter-windows
@@ -146,6 +166,6 @@ jobs:
         with:
           tag: ${{ github.event.inputs.tag || github.ref_name }}
           name: Release ${{ github.event.inputs.tag || github.ref_name }}
-          artifacts: release_artifact/**
+          artifacts: release_artifact/release_bundle.zip
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
