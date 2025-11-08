@@ -10,7 +10,6 @@ on:
         description: 'Tag for release (e.g., v1.0.2)'
         required: true
 
-
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -27,7 +26,6 @@ jobs:
           }
           Write-Host "✅ main.py found"
 
-
       - name: Verify Required Files
         shell: pwsh
         run: |
@@ -38,10 +36,7 @@ jobs:
               exit 1
             }
           }
-          Write-Host "All files are present"
-
-      # ... остальные шаги сборки ...
-
+          Write-Host "✅ All required files found"
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -106,17 +101,21 @@ jobs:
         shell: cmd
         run: |
           pyinstaller --noconfirm --onefile --windowed --name converter main.py
-          if not exist "dist\converter.exe" exit /b 1
+          if not exist "dist\converter.exe" (
+            echo "❌ Build failed: dist\converter.exe not found!"
+            exit /b 1
+          )
 
-      - name: Create Release Bundle
-        shell: bash
+      - name: Create ZIP archive (PowerShell)
+        shell: pwsh
         run: |
-          if [ ! -f "dist/converter.exe" ]; then exit 1; fi
-          zip release_bundle.zip dist/converter.exe          
+          if (-not (Test-Path "dist/converter.exe" -PathType Leaf)) {
+            Write-Error "File dist/converter.exe not found!"
+            exit 1
+          }
+          Compress-Archive -Path "dist/converter.exe! -DestinationPath "release_bundle.zip! -Force
+          Write-Host "✅ Archive release_bundle.zip created"
 
-      - name: List dist/ contents
-        run: dir dist\ || echo "dist/ is empty"
-        shell: cmd
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -130,16 +129,13 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.tag || startsWith(github.ref, 'refs/tags/') }}
 
+
     steps:
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
           name: converter-windows
           path: release_artifact
-
-      - name: Create ZIP
-        shell: bash
-        run: zip release_bundle.zip dist/converter.exe
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
