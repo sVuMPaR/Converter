@@ -20,12 +20,18 @@ jobs:
         uses: actions/checkout@v4
 
 
-      - name: Check required files
-        shell: cmd
+
+      - name: Check required files (PowerShell)
+        shell: pwsh
         run: |
-          if not exist "main.py" (echo Error: main.py not found! & exit /b 1) & ^
-          if not exist "changelog.txt" (echo Error: changelog.txt not found! & exit /b 1) & ^
-          echo All required files found.
+          $files = @("main.py", "changelog.txt")
+          foreach ($file in $files) {
+            if (-not (Test-Path $file)) {
+              Write-Error "Error: $file not found!"
+              exit 1
+           }
+          }
+          Write-Host "All required files found."
 
 
       - name: Setup Python
