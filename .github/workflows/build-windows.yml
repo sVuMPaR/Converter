@@ -19,17 +19,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+
       - name: Check main.py and changelog.txt exist
         shell: cmd
         run: |
-          if not exist main.py (
-            echo Error: main.py not found!
-            exit /b 1
-          )
-          if not exist changelog.txt (
-            echo Error: changelog.txt not found!
-            exit /b 1
-          )
+         if not exist "main.py" (
+           echo Error: main.py not found!
+           exit /b 1
+         )
+    
+         if not exist "changelog.txt" (
+           echo Error: changelog.txt not found!
+           exit /b 1
+         )
+
+         echo All required files found.
 
       - name: Setup Python
         uses: actions/setup-python@v4
