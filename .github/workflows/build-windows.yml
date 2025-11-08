@@ -121,7 +121,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: converter-windows
+          name: converter
           path: release_bundle.zip
           if-no-files-found: error
 
@@ -134,7 +134,7 @@ jobs:
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
-          name: converter-windows
+          name: converter
           path: release_artifact
 
       - name: Create ZIP
