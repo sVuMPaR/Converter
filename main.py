@@ -27,43 +27,52 @@ from PyQt5.QtWidgets import (
     QCheckBox,
 )
 
-# Настройка логирования
 def setup_logging():
     """Настраивает логирование в файл с ротацией."""
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)  # Собираем все уровни логов
+    
+    # Если обработчики уже настроены — не делаем ничего
+    if logger.handlers:
+        return
 
-    # Форматировщик: время, уровень, модуль, строка, сообщение
+    logger.setLevel(logging.DEBUG)
+
+    # Форматировщик
     formatter = logging.Formatter(
         '%(asctime)s | %(levelname)s | %(name)s:%(lineno)d | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # Ротируемый файл лога (максимум 5 МБ, 3 резервных копии)
-    file_handler = RotatingFileHandler(
-        'converter.log',
-        maxBytes=5 * 1024 * 1024,  # 5 МБ
-        backupCount=3,
-        encoding='utf-8'
-    )
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.DEBUG)
+    # Путь к логу в домашней директории пользователя
+    log_path = Path.home() / "converter.log"
 
-    # Вывод в консоль (только WARNING и выше)
+    # Обработчик для файла
+    try:
+        file_handler = RotatingFileHandler(
+            str(log_path),
+            maxBytes=5 * 1024 * 1024,  # 5 МБ
+            backupCount=3,
+            encoding='utf-8',
+            errors='replace'
+        )
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(logging.DEBUG)
+        logger.addHandler(file_handler)
+    except (IOError, OSError) as e:
+        print(f"[LOG] Не удалось открыть лог-файл {log_path}: {e}")
+
+    # Обработчик для консоли
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.WARNING)
-
-
-    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    # Логируем начало работы
-    logging.info("Запуск конвертера изображений")
-    logging.debug("PATH: %s", os.environ.get("PATH"))
+    # Логируем старт
+    logger.info("Запуск конвертера изображений")
+    logger.debug("PATH: %s", os.environ.get("PATH"))
 
-
-setup_logging()  # Инициализируем логирование
+# Инициализируем логирование
+setup_logging()
 
 
 class ImageConverter:
