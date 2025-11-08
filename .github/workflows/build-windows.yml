@@ -13,25 +13,23 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 120
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-
-
-      - name: Check required files (PowerShell)
+      - name: Check Required Files
         shell: pwsh
         run: |
-          $files = @("main.py", "changelog.txt")
-          foreach ($file in $files) {
-            if (-not (Test-Path $file)) {
-              Write-Error "Error: $file not found!"
+          $requiredFiles = @("main.py", "changelog.txt")
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path -Path $file -PathType Leaf)) {
+              Write-Error "❌ ERROR: File not found - $file"
               exit 1
-           }
+            }
           }
-          Write-Host "All required files found."
+          Write-Host "✅ All required files found"
+
+      # ... остальные шаги сборки ...
 
 
       - name: Setup Python
