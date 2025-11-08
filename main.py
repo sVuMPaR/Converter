@@ -1,6 +1,12 @@
 # main.py
 
+
+import requests
+import tkinter as tk
+from tkinter import messagebox
+import urllib.request
 import os
+import subprocess
 import logging
 import sys
 from pathlib import Path
@@ -84,6 +90,83 @@ def setup_logging():
 
 # Инициализируем логирование
 setup_logging()
+
+# --- Блок с версиями ---
+def get_current_version():
+    """Читает текущую версию из файла version.txt"""
+    try:
+        with open("version.txt", "r") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return "0.0.0"
+
+def check_latest_version():
+    """Запрашивает последнюю версию из GitHub API"""
+    url = "https://api.github.com/repos/sVuMPaR/Converter/releases/latest"
+    try:
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            return data["tag_name"]  # например, "v1.0.1"
+        else:
+            print(f"Ошибка API: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Ошибка сети: {e}")
+        return None
+
+def is_new_version_available(current, latest):
+    """Сравнивает версии (возвращает True, если есть обновление)"""
+    current = current.lstrip("v")
+    latest = latest.lstrip("v")
+    curr_parts = list(map(int, current.split(".")))
+    latest_parts = list(map(int, latest.split(".")))
+
+    for i in range(min(len(curr_parts), len(latest_parts))):
+        if latest_parts[i] > curr_parts[i]:
+            return True
+        elif latest_parts[i] < curr_parts[i]:
+            return False
+    return len(latest_parts) > len(curr_parts)
+# Конец блока
+
+
+# --- Диалог и скачивание ---
+def show_update_prompt(latest_version, download_url):
+    """Показывает окно с предложением обновиться"""
+    root = tk.Tk()
+    root.withdraw()  # Скрываем основное окно Tk
+
+    result = messagebox.askyesno(
+        "Обновление доступно",
+        f"Найдена новая версия: {latest_version}\n\n"
+        "Хотите обновиться?\n(Это закроет текущее приложение)",
+        icon="question"
+    )
+
+    if result:
+        download_and_install(download_url)
+    else:
+        root.destroy()
+
+def download_and_install(download_url):
+    """Скачивает новый файл и запускает его"""
+    try:
+        # Имя файла из URL
+        filename = download_url.split("/")[-1]
+        
+        # Скачиваем
+        urllib.request.urlretrieve(download_url, filename)
+        print(f"Скачано: {filename}")
+
+        # Запускаем новый файл и закрываем текущий
+        subprocess.Popen([filename], shell=True)
+        os._exit(0)  # Надёжное завершение
+
+
+    except Exception as e:
+        messagebox.showerror("Ошибка", f"Не удалось обновить: {e}")
+# Конец блока
 
 
 
@@ -353,6 +436,21 @@ class MainWindow(QMainWindow):
 
 # --- Запуск приложения ---
 if __name__ == "__main__":
+
+    # Запуск проверки при старте
+    current_version = get_current_version()
+    latest_tag = check_latest_version()
+
+    if latest_tag and is_new_version_available(current_version, latest_tag):
+        # Формируем URL скачивания (подставьте имя вашего EXE)
+        download_url = (
+            f"https://github.com/sVuMPaR/Converter/"
+            f"releases/download/{latest_tag}/Converter.exe"
+        )
+        show_update_prompt(latest_tag, download_url)
+
+    # Конец блока
+    
     try:
         logging.info("Начало инициализации приложения")
         app = QApplication(sys.argv)
