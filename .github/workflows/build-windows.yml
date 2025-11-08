@@ -98,9 +98,9 @@ jobs:
 
       - name: Verify installed packages
         run: |
-          python -c "import requests; print(f'✅ requests {requests.__version__} imported')"
-          python -c "from PIL import Image; print('✅ Pillow imported')"
-          python -c "import pillow_heif; print('✅ pillow-heif imported')"
+          python -c "import requests; print(f'requests {requests.__version__} imported successfully')"
+          python -c "from PIL import Image; print('Pillow imported successfully')"
+          python -c "import pillow_heif; print('pillow-heif imported successfully')"
         shell: cmd
 
       - name: Build Executable
