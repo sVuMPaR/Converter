@@ -198,4 +198,11 @@ class ConvertWorker(QObject):
                 out_dir = self.output_dir if self.output_dir is not None else input_path.parent
                 converter.convert(input_path, out_dir)
                 success += 1
-            except Exception as
+            except Exception as e:
+                err_msg = f"{input_path.name}: {e}"
+                errors.append(err_msg)
+                logging.error("Ошибка конвертации %s: %s", input_path, e)
+            self.progress.emit(idx, total)
+
+        self.finished.emit(success, total, errors)
+        logging.info("ConvertWorker завершён: успешно=%d/%d, ошибок=%d", success, total, len(errors))
