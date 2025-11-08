@@ -97,24 +97,35 @@ jobs:
           )
         shell: cmd
 
+
       - name: Build Executable
         shell: cmd
         run: |
-          pyinstaller --noconfirm --onefile --windowed --name converter main.py
-          if not exist "dist\converter.exe" (
-            echo "❌ Build failed: dist\converter.exe not found!"
+           pyinstaller --noconfirm --onefile --windowed --name converter main.py
+           if not exist "dist\converter.exe" (
+             echo "❌ Build failed: dist\converter.exe not found!"
             exit /b 1
-          )
+           )
 
       - name: Create ZIP archive (PowerShell)
         shell: pwsh
         run: |
-          if (-not (Test-Path "dist/converter.exe" -PathType Leaf)) {
-            Write-Error "File dist/converter.exe not found!"
+          $source = "dist/converter.exe"
+          $destination = "release_bundle.zip"
+          
+          if (-not (Test-Path -Path $source -PathType Leaf)) {
+            Write-Error "File not found: $source"
             exit 1
           }
-          Compress-Archive -Path "dist/converter.exe! -DestinationPath "release_bundle.zip! -Force
-          Write-Host "✅ Archive release_bundle.zip created"
+          
+          try {
+            Compress-Archive -Path $source -DestinationPath $destination -Force
+            Write-Host "✅ Archive created: $destination"
+          }
+          catch {
+            Write-Error "Failed to create ZIP: $($_.Exception.Message)"
+            exit 1
+          }
 
 
       - name: Upload Artifact
@@ -123,6 +134,19 @@ jobs:
           name: converter-windows
           path: release_bundle.zip
           if-no-files-found: error
+
+
+      - name: Debug - Verify ZIP was created
+        shell: pwsh
+        run: |
+          if (Test-Path "release_bundle.zip" -PathType Leaf) {
+            $size = (Get-Item "release_bundle.zip").Length
+            Write-Host "✅ ZIP archive exists, size: $size bytes"
+            Write-Host "   Full path: $(Resolve-Path "release_bundle.zip")"
+          } else {
+            Write-Error "❌ ZIP archive not found!"
+            exit 1
+          }
 
   release:
     needs: build-windows
