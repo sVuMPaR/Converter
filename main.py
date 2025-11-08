@@ -1,9 +1,10 @@
+# main.py
 
 import os
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional  # ← добавлено
+from typing import List, Optional  # Исправлено: добавлен импорт
 
 from logging.handlers import RotatingFileHandler
 
@@ -96,6 +97,13 @@ class ImageConverter:
         self.background_color = background_color
         logging.debug("ImageConverter инициализирован: quality=%d, overwrite=%s", self.quality, self.overwrite)
 
+        # Проверка регистрации pillow_heif
+        try:
+            pillow_heif.register_heif_opener()
+            logging.debug("pillow_heif успешно зарегистрирован")
+        except Exception as e:
+            logging.error("Ошибка регистрации pillow_heif: %s", e)
+            raise
 
     def _prepare_rgb(self, img: Image.Image) -> Image.Image:
         logging.debug("Подготовка RGB для изображения: mode=%s, size=%s", img.mode, img.size)
@@ -117,10 +125,6 @@ class ImageConverter:
 
 
         try:
-            if input_path.suffix.lower() in ['.heic', '.heif']:
-                pillow_heif.register_heif_opener()
-                logging.debug("Зарегистрирован обработчик HEIF для %s", input_path)
-
             with Image.open(input_path) as img:
                 try:
                     img.seek(0)
@@ -131,7 +135,6 @@ class ImageConverter:
                 rgb = self._prepare_rgb(img)
                 output_name = input_path.stem + ".jpg"
                 output_path = output_dir / output_name
-
 
                 if output_path.exists() and not self.overwrite:
                     i = 1
@@ -170,6 +173,7 @@ class ConvertWorker(QObject):
     status = pyqtSignal(str)
     finished = pyqtSignal(int, int, list)
 
+
     def __init__(self, files: List[Path], output_dir: Optional[Path], quality: int, overwrite: bool):
         super().__init__()
         self.files = files
@@ -197,13 +201,3 @@ class ConvertWorker(QObject):
             self.status.emit(f"Обработка {idx}/{total}: {input_path.name}")
             try:
                 out_dir = self.output_dir if self.output_dir is not None else input_path.parent
-                converter.convert(input_path, out_dir)
-                success += 1
-            except Exception as e:
-                err_msg = f"{input_path.name}: {e}"
-                errors.append(err_msg)
-                logging.error("Ошибка конвертации %s: %s", input_path, e)
-            self.progress.emit(idx, total)
-
-        self.finished.emit(success, total, errors)
-        logging.info("ConvertWorker завершён: успешно=%d/%d, ошибок=%d", success, total, len(errors))
