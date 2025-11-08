@@ -2,10 +2,9 @@
 
 import os
 import logging
-from logging.handlers import RotatingFileHandler
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import List, Optional
 
 from PIL import Image, UnidentifiedImageError
 import pillow_heif
@@ -27,6 +26,8 @@ from PyQt5.QtWidgets import (
     QCheckBox,
 )
 
+
+# --- Настройка логирования ---
 def setup_logging():
     """Настраивает логирование в файл с ротацией (в папке с EXE)."""
     logger = logging.getLogger()
@@ -76,13 +77,17 @@ def setup_logging():
     logger.info("Запуск конвертера изображений")
     logger.debug("PATH: %s", os.environ.get("PATH"))
 
+
+
 # Инициализируем логирование
 setup_logging()
 
 
+
+# --- Классы приложения ---
+
 class ImageConverter:
     """Класс, отвечающий за конвертацию одного файла в JPG. Поддерживает HEIC через pillow-heif."""
-
 
     def __init__(self, quality: int = 85, overwrite: bool = False, background_color=(255, 255, 255)):
         self.quality = max(1, min(100, quality))
@@ -103,7 +108,6 @@ class ImageConverter:
             return bg
         return img.convert("RGB")
 
-
     def convert(self, input_path: Path, output_dir: Path) -> Path:
         logging.info("Начало конвертации: %s -> %s", input_path, output_dir)
         if not input_path.exists():
@@ -116,13 +120,11 @@ class ImageConverter:
                 pillow_heif.register_heif_opener()
                 logging.debug("Зарегистрирован обработчик HEIF для %s", input_path)
 
-
             with Image.open(input_path) as img:
                 try:
                     img.seek(0)
                 except Exception as e:
                     logging.debug("img.seek(0) не поддерживается: %s", e)
-
 
                 logging.info("Обработка %s (mode: %s, size: %s)", input_path.name, img.mode, img.size)
                 rgb = self._prepare_rgb(img)
@@ -161,11 +163,11 @@ class ImageConverter:
             raise RuntimeError(f"Failed to convert {input_path}: {e}") from e
 
 
+
 class ConvertWorker(QObject):
     progress = pyqtSignal(int, int)
     status = pyqtSignal(str)
     finished = pyqtSignal(int, int, list)
-
 
     def __init__(self, files: List[Path], output_dir: Optional[Path], quality: int, overwrite: bool):
         super().__init__()
@@ -176,11 +178,9 @@ class ConvertWorker(QObject):
         self._is_running = True
         logging.debug("ConvertWorker инициализирован: файлов=%d, качество=%d, перезапись=%s", len(files), quality, overwrite)
 
-
     def stop(self):
         self._is_running = False
         logging.info("ConvertWorker остановлен по запросу")
-
 
     def run(self):
         converter = ImageConverter(quality=self.quality, overwrite=self.overwrite)
@@ -198,18 +198,4 @@ class ConvertWorker(QObject):
                 out_dir = self.output_dir if self.output_dir is not None else input_path.parent
                 converter.convert(input_path, out_dir)
                 success += 1
-            except Exception as e:
-                err_msg = f"{input_path.name}: {e}"
-                errors.append(err_msg)
-                logging.error("Ошибка конвертации %s: %s", input_path, e)
-            self.progress.emit(idx, total)
-
-
-        self.finished.emit(success, total, errors)
-        logging.info("ConvertWorker завершён: успешно=%d/%d, ошибок=%d", success, total, len(errors))
-
-
-class FileListWidget(QListWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self
+            except Exception as
