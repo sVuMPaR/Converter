@@ -1,3 +1,4 @@
+pip install -r requirements.txt
 PyQt5>=5.15
 Pillow>=9.0.0
 pillow-heif>=0.10.0
