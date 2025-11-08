@@ -10,28 +10,22 @@ on:
         description: 'Tag for release (e.g., v1.0.0)'
         required: true
 
+
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-    
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Debug - Check Files
-        shell: pwsh
-        run: Get-ChildItem -File
-
-      - name: Check .gitignore
+      - name: Verify main.py exists
         shell: pwsh
         run: |
-          if (Test-Path ".gitignore") {
-            Get-Content ".gitignore" | Where-Object { $_ -match "main.py|changelog.txt" }
-          } else {
-            Write-Host ".gitignore not found"
+          if (-not (Test-Path -Path "main.py" -PathType Leaf)) {
+            Write-Error "File not found: main.py"
+            exit 1
           }
+          Write-Host "✅ main.py found"
 
 
       - name: Verify Required Files
@@ -113,11 +107,6 @@ jobs:
           pyinstaller --noconfirm --onefile --windowed --name converter main.py
         shell: cmd
 
-      - name: Copy changelog.txt to dist
-        run: |
-          copy changelog.txt dist\changelog.txt
-        shell: cmd
-
       - name: List dist/ contents
         run: dir dist\ || echo "dist/ is empty"
         shell: cmd
@@ -126,8 +115,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: converter-windows
-          path: dist/**
-          if-no-files-found: error
+          path: release_bundle.zip
 
   release:
     needs: build-windows
@@ -141,15 +129,9 @@ jobs:
           name: converter-windows
           path: release_artifact
 
-      - name: Create ZIP archive with converter.exe and changelog.txt
+      - name: Create ZIP archive
         run: |
-          # Создаём архив
-          zip release_bundle.zip \
-            release_artifact/converter.exe \
-            release_artifact/changelog.txt
-          
-          # Проверяем содержимое
-          unzip -l release_bundle.zip
+          zip release_bundle.zip dist/converter.exe
         shell: bash
 
       - name: Create GitHub Release
@@ -157,6 +139,6 @@ jobs:
         with:
           tag: ${{ github.event.inputs.tag || github.ref_name }}
           name: Release ${{ github.event.inputs.tag || github.ref_name }}
-          artifacts: release_bundle.zip  # Загружаем только ZIP-архив
+          artifacts: release_artifact/release_bundle.zip
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
