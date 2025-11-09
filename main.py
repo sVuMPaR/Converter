@@ -439,10 +439,10 @@ class MainWindow(QMainWindow):
     
             self.status_bar.setText(f"Добавлено {added_count} файлов")
 
-    except Exception as e:
-        # Критично: логгируем ВСЁ
-        logger.critical(f"Неожиданная ошибка в on_add_files_clicked: {type(e).__name__}: {e}", exc_info=True)
-        QMessageBox.critical(self, "Критическая ошибка", f"Произошла ошибка:\n{e}\n\nПроверьте лог для деталей.")
+        except Exception as e:
+            # Критично: логгируем ВСЁ
+            logger.critical(f"Неожиданная ошибка в on_add_files_clicked: {type(e).__name__}: {e}", exc_info=True)
+            QMessageBox.critical(self, "Критическая ошибка", f"Произошла ошибка:\n{e}\n\nПроверьте лог для деталей.")
 
     def process_files_in_background(self, file_paths):
         """Запускает обработку файлов в отдельном потоке"""
