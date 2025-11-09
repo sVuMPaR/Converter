@@ -392,33 +392,24 @@ class MainWindow(QMainWindow):
 
 
     def on_add_files_clicked(self):
-        """Обработчик нажатия кнопки «Добавить файлы»"""
         try:
-            logger.info("Нажата кнопка «Добавить файлы»")
-    
             file_paths, _ = QFileDialog.getOpenFileNames(
                 self,
                 "Выбрать изображения",
-                "",
-                "Изображения (*.jpg *.jpeg *.png *.heic *.tiff *.bmp)"
+                os.path.expanduser("~/Pictures"),  # стартовая папка
+                "Изображения (*.jpg *.jpeg *.png)"
             )
-    
             if not file_paths:
-                logger.info("Нет выбранных файлов")
                 return
-    
-            logger.info(f"Выбрано файлов: {len(file_paths)}")
-    
-            # Добавляем в список интерфейса
+
             for path in file_paths:
-                self.file_list.addItem(path)
-    
-            # Запускаем обработку в фоне
-            self.process_files_in_background(file_paths)
-    
+                if os.path.isfile(path):  # проверка на файл
+                    self.file_list.addItem(path)
+            self.status_bar.setText(f!Добавлено {len(file_paths)} файлов")
+
         except Exception as e:
-            logger.critical(f"Критическая ошибка при выборе файлов: {e}", exc_info=True)
-            QMessageBox.critical(self, "Ошибка", f"Не удалось добавить файлы: {e}")
+            logger.critical(f!Ошибка в on_add_files_clicked: {e}", exc_info=True)
+            QMessageBox.critical(self, "Критическая ошибка", str(e))
 
     def process_files_in_background(self, file_paths):
         """Запускает обработку файлов в отдельном потоке"""
@@ -521,7 +512,7 @@ if __name__ == "__main__":
         # Формируем URL скачивания (подставьте имя вашего EXE)
         download_url = (
             f"https://github.com/sVuMPaR/Converter/"
-            f"releases/download/{latest_tag}/Converter.exe"
+            f"releases/download/{latest_tag}/release_bundle.zip"
         )
         show_update_prompt(latest_tag, download_url)
 
