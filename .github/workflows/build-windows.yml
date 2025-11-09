@@ -13,20 +13,12 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Verify main.py exists
-        shell: pwsh
-        run: |
-          if (-not (Test-Path -Path "main.py" -PathType Leaf)) {
-            Write-Error "File not found: main.py"
-            exit 1
-          }
-          Write-Host "main.py found"
-
-      - name: Verify Required Files
+      - name: Verify required files
         shell: pwsh
         run: |
           $files = @("main.py", "changelog.txt")
@@ -43,136 +35,48 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Configure Python user paths
-        run: |
-          if not exist "%APPDATA%\Python" (
-            mkdir "%APPDATA%\Python"
-          )
-          set "PY_USER_SITE=%APPDATA%\Python"
-          set "PY_SCRIPTS=%PY_USER_SITE%\Scripts"
-          set "PY_LIB=%PY_USER_SITE%\Python310\site-packages"
-          echo "%PY_SCRIPTS%" >> "%GITHUB_PATH%"
-          echo "%PY_LIB%" >> "%GITHUB_PYTHONPATH%"
-          echo "%PY_LIB%" > "%PYTHONUSERBASE%\python310.pth"
-        shell: cmd
-
-      - name: Install libheif via vcpkg
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git
-          cd vcpkg
-          .\bootstrap-vcpkg.bat
-          vcpkg install libheif:x64-windows
-          echo "C:\vcpkg\installed\x64-windows\bin" >> "%GITHUB_PATH%"
-        shell: cmd
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           if exist requirements.txt (
-            python -m pip install -r requirements.txt --user
+            pip install -r requirements.txt
           )
-          python -m pip install pyinstaller --user
-          echo "Dependencies installed"
-        shell: cmd
-
-      - name: Verify PyInstaller is installed
-        run: |
-          where pyinstaller
-          pyinstaller --version
-        shell: cmd
-
-      - name: Verify module imports
-        run: |
-          where pyinstaller
-          python -c "import PyInstaller; print('PyInstaller imported successfully')"
-          python -c "from PIL import Image; print('Pillow imported successfully')"
-          python -c "import pillow_heif; print('pillow-heif imported successfully')"
-        shell: cmd
-
-      - name: Debug Python paths and site-packages
-        run: |
-          echo PYTHONPATH: %PYTHONPATH%
-          echo GITHUB_PYTHONPATH: %GITHUB_PYTHONPATH%
-          if exist "%APPDATA%\Python\site-packages" (
-            dir "%APPDATA%\Python\site-packages" /b /s | findstr /i "pillow-heif"
-          ) else (
-            echo site-packages directory not found.
-          )
-        shell: cmd
-
-      - name: Verify installed packages
-        run: |
-          python -c "import requests; print(f'requests {requests.__version__} imported successfully')"
-          python -c "from PIL import Image; print('Pillow imported successfully')"
-          python -c "import pillow_heif; print('pillow-heif imported successfully')"
+          pip install pyinstaller pillow pillow-heif
         shell: cmd
 
       - name: Build Executable
         shell: cmd
         run: |
-          :: Используем python -m PyInstaller (надёжнее, чем pyinstaller)
-          python -m PyInstaller --noconfirm --onefile --windowed --name converter main.py
+          python -m PyInstaller ^
+            --noconfirm ^
+            --onefile ^
+            --windowed ^
+            --name converter ^
+            main.py
           
-          :: Проверяем результат
           if not exist "dist\converter.exe" (
             echo "Build failed: dist\converter.exe not found!"
             exit /b 1
-          ) else (
-            echo "Executable created: dist\converter.exe"
           )
+          echo "Executable created: dist\converter.exe"
 
-      - name: Create ZIP archive (PowerShell)
-        shell: pwsh
-        run: |
-          $source = "dist/converter.exe"
-          $destination = "release_bundle.zip"
-          
-          if (-not (Test-Path -Path $source -PathType Leaf)) {
-            Write-Error "File not found: $source"
-            exit 1
-          }
-          
-          try {
-            Compress-Archive -Path $source -DestinationPath $destination -Force
-            Write-Host "Archive created: $destination"
-          }
-          catch {
-            Write-Error "Failed to create ZIP: $($_.Exception.Message)"
-            exit 1
-          }
-
-
-      - name: Upload Artifact
+      - name: Upload Artifact (for debugging)
         uses: actions/upload-artifact@v4
         with:
-          name: converter-windows
-          path: release_bundle.zip
+          name: converter-exe
+          path: dist/converter.exe
           if-no-files-found: error
-
-
-      - name: Debug - Verify ZIP was created
-        shell: pwsh
-        run: |
-          if (Test-Path "release_bundle.zip" -PathType Leaf) {
-            $size = (Get-Item "release_bundle.zip").Length
-            Write-Host "ZIP archive exists, size: $size bytes"
-            Write-Host "   Full path: $(Resolve-Path "release_bundle.zip")"
-          } else {
-            Write-Error "ZIP archive not found!"
-            exit 1
-          }
 
   release:
     needs: build-windows
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.tag || startsWith(github.ref, 'refs/tags/') }}
 
-
     steps:
       - name: Download Artifact
         uses: actions/download-artifact@v4
         with:
-          name: converter-windows
+          name: converter-exe
           path: release_artifact
 
       - name: Create GitHub Release
@@ -180,6 +84,7 @@ jobs:
         with:
           tag: ${{ github.event.inputs.tag || github.ref_name }}
           name: Release ${{ github.event.inputs.tag || github.ref_name }}
-          artifacts: release_artifact/release_bundle.zip
+          artifacts: release_artifact/converter.exe
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
+          asset_content_type: application/x-msdownload
