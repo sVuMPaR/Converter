@@ -256,52 +256,70 @@ class ImageConverter:
 
 
 
-class ConvertWorker(QObject):
-    progress = pyqtSignal(int, int)
-    status = pyqtSignal(str)
-    finished = pyqtSignal(int, int, list)
+class FileProcessorWorker(QThread):
+    """Рабочий поток для конвертации изображений в JPG"""
+    
+    # Сигналы для взаимодействия с GUI
+    finished = pyqtSignal(bool, str)        # (успех, сообщение)
+    progress = pyqtSignal(int)              # процент выполнения (0–100)
+    file_processed = pyqtSignal(str, str)    # (исходный_путь, результат)
 
-    def __init__(self, files: List[Path], output_dir: Optional[Path], quality: int, overwrite: bool):
+    def __init__(self, file_paths, quality, overwrite):
         super().__init__()
-        self.files = files
-        self.output_dir = output_dir
+        self.file_paths = file_paths
         self.quality = quality
         self.overwrite = overwrite
-        self._is_running = True
-        logging.debug(
-            "ConvertWorker инициализирован: файлов=%d, качество=%d, перезапись=%s",
-            len(files), quality, overwrite
-        )
-
-    def stop(self):
-        self._is_running = False
-        logging.info("ConvertWorker остановлен по запросу")
 
     def run(self):
-        converter = ImageConverter(quality=self.quality, overwrite=self.overwrite)
-        total = len(self.files)
-        success = 0
-        errors = []
+        """Основной метод потока — выполняется в фоне"""
+        try:
+            total = len(self.file_paths)
+            if total == 0:
+                self.finished.emit(True, "Нет файлов для обработки")
+                return
 
-        for idx, input_path in enumerate(self.files, start=1):
-            if not self._is_running:
-                logging.warning("ConvertWorker прерван на файле %d/%d: %s", idx, total, input_path)
-                break
+            success_count = 0
+            for i, src_path in enumerate(self.file_paths):
+                try:
+                    # Открываем изображение
+                    with Image.open(src_path) as img:
+                        # Конвертируем в RGB (обязательно для JPG)
+                        if img.mode in ("RGBA", "LA", "P"):
+                            img = img.convert("RGB")
 
-            self.status.emit(f"Обработка {idx}/{total}: {input_path.name}")
-            try:
-                out_dir = self.output_dir if self.output_dir is not None else input_path.parent
-                output_path = converter.convert(input_path, out_dir)
-                success += 1
-                logging.info("Конвертация завершена: %s -> %s", input_path, output_path)
-            except Exception as e:
-                err_msg = f"{input_path.name}: {str(e)}"
-                errors.append(err_msg)
-                logging.error("Ошибка конвертации %s: %s", input_path, e)
-            self.progress.emit(idx, total)
+                        # Формируем путь для сохранения
+                        base_name = os.path.splitext(os.path.basename(src_path))[0]
+                        dest_path = os.path.join(
+                            os.path.dirname(src_path),
+                            f"{base_name}.jpg"
+                        )
 
-        self.finished.emit(success, total, errors)
-        logging.info("ConvertWorker завершён: успешно=%d/%d, ошибок=%d", success, total, len(errors))
+                        # Проверяем перезапись
+                        if os.path.exists(dest_path) and not self.overwrite:
+                            self.file_processed.emit(src_path, "Пропущено (файл существует)")
+                            continue
+
+                        # Сохраняем в JPG
+                        img.save(dest_path, "JPEG", quality=self.quality, optimize=True)
+                        self.file_processed.emit(src_path, "Успешно")
+                        success_count += 1
+
+                except Exception as e:
+                    logger.error(f"Ошибка при обработке {src_path}: {e}")
+                    self.file_processed.emit(src_path, f"Ошибка: {str(e)}")
+
+                # Обновляем прогресс
+                self.progress.emit(int((i + 1) / total * 100))
+
+            # Завершаем работу
+            if success_count == total:
+                self.finished.emit(True, f"Конвертация завершена: {success_count} файлов")
+            else:
+                self.finished.emit(False, f"Частично успешно: {success_count}/{total} файлов")
+
+        except Exception as e:
+            logger.critical(f"Критическая ошибка в потоке: {e}", exc_info=True)
+            self.finished.emit(False, f"Критическая ошибка: {str(e)}")
 
 
 
@@ -372,49 +390,73 @@ class MainWindow(QMainWindow):
         self.worker_thread = None
         self.worker = None
 
+
     def on_add_files_clicked(self):
-        """Обработчик нажатия кнопки 'Добавить файлы'"""
+        """Обработчик нажатия кнопки «Добавить файлы»"""
         try:
-            logger.info("Нажата кнопка 'Добавить файлы'")
-
-
-            # Открываем диалог выбора файлов
+            logger.info("Нажата кнопка «Добавить файлы»")
+    
             file_paths, _ = QFileDialog.getOpenFileNames(
                 self,
                 "Выбрать изображения",
                 "",
-                "Изображения (*.jpg *.jpeg *.png *.heic *.tiff)"
+                "Изображения (*.jpg *.jpeg *.png *.heic *.tiff *.bmp)"
             )
-
+    
             if not file_paths:
                 logger.info("Нет выбранных файлов")
                 return
-
+    
             logger.info(f"Выбрано файлов: {len(file_paths)}")
-
-            # Запускаем обработку в фоновом потоке
+    
+            # Добавляем в список интерфейса
+            for path in file_paths:
+                self.file_list.addItem(path)
+    
+            # Запускаем обработку в фоне
             self.process_files_in_background(file_paths)
-
+    
         except Exception as e:
-            logger.critical(f"Критическая ошибка: {e}", exc_info=True)
+            logger.critical(f"Критическая ошибка при выборе файлов: {e}", exc_info=True)
             QMessageBox.critical(self, "Ошибка", f"Не удалось добавить файлы: {e}")
 
     def process_files_in_background(self, file_paths):
         """Запускает обработку файлов в отдельном потоке"""
-        self.worker = FileProcessorWorker(file_paths)
+        # Создаём рабочий поток
+        self.worker = FileProcessorWorker(file_paths, self.quality_spin.value(), self.overwrite_checkbox.isChecked())
+        
+        # Подключаем сигналы
         self.worker.finished.connect(self.on_processing_finished)
-        self.worker.start()
+        self.worker.progress.connect(self.update_progress)  # если есть прогресс
+        
+        # Запускаем поток
+        self.worker_thread = QThread()
+        self.worker.moveToThread(self.worker_thread)
+        self.worker_thread.started.connect(self.worker.run)
+        self.worker_thread.start()
+    
         logger.info("Обработка запущена в фоновом режиме")
-
-    def on_processing_finished(self, success, message):
+    
+     def on_processing_finished(self, success, message):
         """Вызывается после завершения фоновой обработки"""
         if success:
             logger.info(message)
             QMessageBox.information(self, "Успех", message)
+            self.status_bar.setText("Конвертация завершена")
         else:
             logger.error(message)
             QMessageBox.critical(self, "Ошибка", message)
-        self.worker = None  # Очищаем ссылку
+            self.status_bar.setText("Ошибка конвертации")
+    
+        # Очищаем потоки
+        if self.worker_thread:
+            self.worker_thread.quit()
+            self.worker_thread.wait()
+        self.worker = None
+        self.worker_thread = None
+    
+        # Сбрасываем прогресс
+        self.progress_bar.setValue(0)
 
     def clear_files(self):
         self.file_list.clear()
