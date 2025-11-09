@@ -289,7 +289,7 @@ def start_conversion(self):
             "Критическая ошибка",
             f"Произошла ошибка при конвертации:\n{e}\n\nПроверьте лог converter.log для деталей."
         )
-            )
+            
 
     @pyqtSlot()
     def clear_files(self):
