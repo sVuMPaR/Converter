@@ -96,7 +96,7 @@ jobs:
             exit 1
           fi
 
-          NEW_NAME="MyApp-${CLEAN_VERSION}.exe"
+          NEW_NAME="Converter-${CLEAN_VERSION}.exe"
           mv "$EXE_PATH" "dist/${NEW_NAME}"
           echo "version_name=${NEW_NAME}" >> $GITHUB_OUTPUT
           echo "Переименовано в dist/${NEW_NAME}"
