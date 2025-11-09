@@ -207,81 +207,115 @@ class MainWindow(QMainWindow):
                 f"Произошла ошибка:\n{e}\n\nПроверьте лог converter.log для деталей."
             )
 
-    @pyqtSlot()
-    def start_conversion(self):  # ← Этот метод должен быть здесь!
+@pyqtSlot()
+def start_conversion(self):
+    try:
+        logger.info("=== НАЧАЛО start_conversion ===")
+
+        if self.file_list.count() == 0:
+            logger.warning("Нет файлов для конвертации")
+            QMessageBox.warning(self, "Предупреждение", "Добавьте файлы перед конвертацией")
+            return
+
+        quality = self.quality_spin.value()
+        overwrite = self.overwrite_checkbox.isChecked()
+
+        logger.debug(f"Настройки конвертации: качество={quality}, перезапись={overwrite}")
+
+        file_paths = []
+        for i in range(self.file_list.count()):
+            file_path = self.file_list.item(i).text()
+            if os.path.isfile(file_path):
+                file_paths.append(file_path)
+            else:
+                logger.warning(f"Файл не существует (пропущен): {file_path}")
+
+        if not file_paths:
+            logger.error("Нет валидных файлов для конвертации")
+            QMessageBox.critical(self, "Ошибка", "Нет доступных файлов для конвертации")
+            return
+
+        logger.info(f"Начинаем конвертацию {len(file_paths)} файлов")
+
+        self.progress_bar.setRange(0, len(file_paths))
+        self.progress_bar.setValue(0)
+
+        # РЕГИСТРАЦИЯ HEIF-ОПЕНЕРА ДЛЯ PILLOW
         try:
-            logger.info("=== НАЧАЛО start_conversion ===")
+            from pillow_heif import register_heif_opener
+            register_heif_opener()
+            logger.info("Поддержка HEIC активирована через pillow-heif")
+        except ImportError:
+            logger.warning("pillow-heif не установлен. HEIC-файлы не будут конвертированы.")
 
-            if self.file_list.count() == 0:
-                logger.warning("Нет файлов для конвертации")
-                QMessageBox.warning(self, "Предупреждение", "Добавьте файлы перед конвертацией")
-                return
+        for idx, path in enumerate(file_paths):
+            try:
+                logger.debug(f"Конвертируем: {path}")
 
-            quality = self.quality_spin.value()
-            overwrite = self.overwrite_checkbox.isChecked()
+                # ОПРЕДЕЛЯЕМ РАСШИРЕНИЕ
+                ext = os.path.splitext(path)[1].lower()
 
-            logger.debug(f"Настройки конвертации: качество={quality}, перезапись={overwrite}")
-
-            file_paths = []
-            for i in range(self.file_list.count()):
-                file_path = self.file_list.item(i).text()
-                if os.path.isfile(file_path):
-                    file_paths.append(file_path)
+                if ext == ".heic":
+                    # КОНВЕРТАЦИЯ HEIC ЧЕРЕЗ pillow-heif
+                    try:
+                        from PIL import Image
+                        with Image.open(path) as img:
+                            output_path = os.path.splitext(path)[0] + ".jpg"
+                            if not overwrite and os.path.exists(output_path):
+                                logger.warning(f"Файл уже существует (пропуск): {output_path}")
+                                continue
+                            img.convert("RGB").save(
+                                output_path,
+                                "JPEG",
+                                quality=quality,
+                                optimize=True
+                            )
+                        logger.info(f"Сохранено: {output_path}")
+                    except Exception as e:
+                        logger.error(f"Ошибка при конвертации HEIC {path}: {e}")
+                        QMessageBox.warning(
+                            self,
+                            "Ошибка конвертации HEIC",
+                            f"Не удалось обработать файл:\n{path}\nОшибка: {e}"
+                        )
                 else:
-                    logger.warning(f"Файл не существует (пропущен): {file_path}")
-
-            if not file_paths:
-                logger.error("Нет валидных файлов для конвертации")
-                QMessageBox.critical(self, "Ошибка", "Нет доступных файлов для конвертации")
-                return
-
-            logger.info(f"Начинаем конвертацию {len(file_paths)} файлов")
-
-
-            self.progress_bar.setRange(0, len(file_paths))
-            self.progress_bar.setValue(0)
-
-            for idx, path in enumerate(file_paths):
-                try:
-                    logger.debug(f"Конвертируем: {path}")
-
+                    # КОНВЕРТАЦИЯ ДРУГИХ ФОРМАТОВ (JPG, PNG и т.д.)
                     from PIL import Image
                     with Image.open(path) as img:
                         output_path = os.path.splitext(path)[0] + ".jpg"
-
                         if not overwrite and os.path.exists(output_path):
                             logger.warning(f"Файл уже существует (пропуск): {output_path}")
                             continue
-
                         img.convert("RGB").save(
                             output_path,
                             "JPEG",
                             quality=quality,
                             optimize=True
                         )
-
                     logger.info(f"Сохранено: {output_path}")
-                    self.progress_bar.setValue(idx + 1)
-                    self.status_bar.setText(f"Конвертировано {idx + 1}/{len(file_paths)}")
 
-                except Exception as e:
-                    logger.error(f"Ошибка при конвертации {path}: {e}")
-                    QMessageBox.warning(
-                        self,
-                        "Ошибка конвертации",
-                        f"Не удалось обработать файл:\n{path}\nОшибка: {e}"
-                    )
+                self.progress_bar.setValue(idx + 1)
+                self.status_bar.setText(f"Конвертировано {idx + 1}/{len(file_paths)}")
 
-            self.status_bar.setText("Конвертация завершена")
-            QMessageBox.information(self, "Готово", "Конвертация выполнена успешно!")
+            except Exception as e:
+                logger.error(f"Ошибка при конвертации {path}: {e}")
+                QMessageBox.warning(
+                    self,
+                    "Ошибка конвертации",
+                    f"Не удалось обработать файл:\n{path}\nОшибка: {e}"
+                )
 
-        except Exception as e:
-            logger.critical(f"ФАТАЛЬНАЯ ОШИБКА в start_conversion: {type(e).__name__}: {e}", exc_info=True)
-            QMessageBox.critical(
-                self,
-                "Критическая ошибка",
-                f"Произошла ошибка при конвертации:\n{e}\n\nПроверьте лог converter.log для деталей."
-            )
+        self.status_bar.setText("Конвертация завершена")
+        QMessageBox.information(self, "Готово", "Конвертация выполнена успешно!")
+
+    except Exception as e:
+        logger.critical(f"ФАТАЛЬНАЯ ОШИБКА в start_conversion: {type(e).__name__}: {e}", exc_info=True)
+        QMessageBox.critical(
+            self,
+            "Критическая ошибка",
+            f"Произошла ошибка при конвертации:\n{e}\n\nПроверьте лог converter.log для деталей."
+        )
+
             
 
     @pyqtSlot()
