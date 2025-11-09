@@ -372,15 +372,49 @@ class MainWindow(QMainWindow):
         self.worker_thread = None
         self.worker = None
 
-    def add_files(self):
-        files, _ = QFileDialog.getOpenFileNames(
-            (self, "Выбрать изображения", "", "Изображения (*.jpg *.jpeg *.png *.bmp *.heic *.heif)"))
-        if files:
-            for file in files:
-                item = QListWidgetItem(Path(file).name)
-                item.setData(Qt.UserRole, Path(file))
-                self.file_list.addItem(item)
-            self.status_bar.setText(f"Добавлено {len(files)} файлов")
+    def on_add_files_clicked(self):
+        """Обработчик нажатия кнопки 'Добавить файлы'"""
+        try:
+            logger.info("Нажата кнопка 'Добавить файлы'")
+
+
+            # Открываем диалог выбора файлов
+            file_paths, _ = QFileDialog.getOpenFileNames(
+                self,
+                "Выбрать изображения",
+                "",
+                "Изображения (*.jpg *.jpeg *.png *.heic *.tiff)"
+            )
+
+            if not file_paths:
+                logger.info("Нет выбранных файлов")
+                return
+
+            logger.info(f"Выбрано файлов: {len(file_paths)}")
+
+            # Запускаем обработку в фоновом потоке
+            self.process_files_in_background(file_paths)
+
+        except Exception as e:
+            logger.critical(f"Критическая ошибка: {e}", exc_info=True)
+            QMessageBox.critical(self, "Ошибка", f"Не удалось добавить файлы: {e}")
+
+    def process_files_in_background(self, file_paths):
+        """Запускает обработку файлов в отдельном потоке"""
+        self.worker = FileProcessorWorker(file_paths)
+        self.worker.finished.connect(self.on_processing_finished)
+        self.worker.start()
+        logger.info("Обработка запущена в фоновом режиме")
+
+    def on_processing_finished(self, success, message):
+        """Вызывается после завершения фоновой обработки"""
+        if success:
+            logger.info(message)
+            QMessageBox.information(self, "Успех", message)
+        else:
+            logger.error(message)
+            QMessageBox.critical(self, "Ошибка", message)
+        self.worker = None  # Очищаем ссылку
 
     def clear_files(self):
         self.file_list.clear()
