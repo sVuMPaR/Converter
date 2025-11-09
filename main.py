@@ -405,10 +405,10 @@ class MainWindow(QMainWindow):
             for path in file_paths:
                 if os.path.isfile(path):  # проверка на файл
                     self.file_list.addItem(path)
-            self.status_bar.setText(f!Добавлено {len(file_paths)} файлов")
+            self.status_bar.setText(f"Добавлено {len(file_paths)} файлов")
 
         except Exception as e:
-            logger.critical(f!Ошибка в on_add_files_clicked: {e}", exc_info=True)
+            logger.critical(f"Ошибка в on_add_files_clicked: {e}", exc_info=True)
             QMessageBox.critical(self, "Критическая ошибка", str(e))
 
     def process_files_in_background(self, file_paths):
