@@ -73,18 +73,54 @@ jobs:
     if: ${{ github.event.inputs.tag || startsWith(github.ref, 'refs/tags/') }}
 
     steps:
-      - name: Download Artifact
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: converter-exe
-          path: release_artifact
+          path: dist
+
+      - name: Debug files in dist
+        run: |
+          echo "=== Файлы после загрузки артефактов ==="
+          ls -R dist
+
+      - name: Determine version and rename file
+        id: version
+        run: |
+          VERSION=${{ github.event.inputs.tag || github.ref_name }}
+          CLEAN_VERSION=${VERSION#refs/tags/}
+          EXE_PATH=$(find dist -type f -name "converter.exe" | head -n 1)
+
+          if [ -z "$EXE_PATH" ]; then
+            echo "converter.exe не найден!"
+            exit 1
+          fi
+
+          NEW_NAME="Converter-${CLEAN_VERSION}.exe"
+          mv "$EXE_PATH" "dist/${NEW_NAME}"
+          echo "version_name=${NEW_NAME}" >> $GITHUB_OUTPUT
+          echo "Переименовано в dist/${NEW_NAME}"
+
+      - name: Read changelog
+        id: changelog
+        run: |
+          if [ -f "dist/changelog.txt" ]; then
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            cat dist/changelog.txt >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "changelog=No changelog found." >> $GITHUB_OUTPUT
+          fi
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.event.inputs.tag || github.ref_name }}
           name: Release ${{ github.event.inputs.tag || github.ref_name }}
-          artifacts: release_artifact/converter.exe:MyApp-${{ github.ref_name }}.exe
-          generateReleaseNotes: true
+          artifacts: |
+            dist/${{ steps.version.outputs.version_name }}
+            dist/changelog.txt
+          body: ${{ steps.changelog.outputs.changelog }}
+          generateReleaseNotes: false
           token: ${{ secrets.GITHUB_TOKEN }}
-          allowUpdates: true  # перезаписывать релиз при повторном запуске
+          allowUpdates: true
+
