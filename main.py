@@ -437,7 +437,7 @@ class MainWindow(QMainWindow):
     
         logger.info("Обработка запущена в фоновом режиме")
     
-     def on_processing_finished(self, success, message):
+    def on_processing_finished(self, success, message):
         """Вызывается после завершения фоновой обработки"""
         if success:
             logger.info(message)
