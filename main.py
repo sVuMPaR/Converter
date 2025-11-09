@@ -391,25 +391,56 @@ class MainWindow(QMainWindow):
         self.worker = None
 
 
-    def on_add_files_clicked(self):
-        try:
-            file_paths, _ = QFileDialog.getOpenFileNames(
-                self,
-                "Выбрать изображения",
-                os.path.expanduser("~/Pictures"),  # стартовая папка
-                "Изображения (*.jpg *.jpeg *.png)"
-            )
-            if not file_paths:
-                return
+def on_add_files_clicked(self):
+    try:
+        logger.info("Нажата кнопка «Добавить файлы»")
 
-            for path in file_paths:
-                if os.path.isfile(path):  # проверка на файл
-                    self.file_list.addItem(path)
-            self.status_bar.setText(f"Добавлено {len(file_paths)} файлов")
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Выбрать изображения",
+            "",
+            "Изображения (*.jpg *.jpeg *.png *.heic *.heif *.tiff *.bmp *.webp)"
+        )
 
-        except Exception as e:
-            logger.critical(f"Ошибка в on_add_files_clicked: {e}", exc_info=True)
-            QMessageBox.critical(self, "Критическая ошибка", str(e))
+        if not file_paths:
+            logger.info("Нет выбранных файлов")
+            return
+
+        logger.info(f"Выбрано файлов: {len(file_paths)}")
+
+        # Обрабатываем каждый файл по отдельности
+        added_count = 0
+        for path in file_paths:
+            ext = os.path.splitext(path)[1].lower()
+
+            # Для HEIC/HEIF проверяем поддержку
+            if ext in ['.heic', '.heif']:
+                try:
+                    from pillow_heif import register_heif_opener
+                    register_heif_opener()  # Регистрируем обработчик HEIF
+                except ImportError:
+                    QMessageBox.warning(
+                        self,
+                        "Предупреждение",
+                        f"Не поддерживается формат {ext}. Установите pillow-heif."
+                    )
+                    continue  # Пропускаем файл, если нет поддержки
+
+            # Проверяем, что файл существует
+            if not os.path.isfile(path):
+                logger.warning(f"Файл не найден: {path}")
+                continue
+
+            # Добавляем в список интерфейса
+            self.file_list.addItem(path)
+            added_count += 1
+
+        # Обновляем статус-бар
+        self.status_bar.setText(f"Добавлено {added_count} файлов")
+
+    except Exception as e:
+        logger.critical(f"Ошибка в on_add_files_clicked: {e}", exc_info=True)
+        QMessageBox.critical(self, "Критическая ошибка", str(e))
 
     def process_files_in_background(self, file_paths):
         """Запускает обработку файлов в отдельном потоке"""
