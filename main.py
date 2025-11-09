@@ -381,7 +381,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.status_bar)
 
         # Подключение сигналов
-        self.add_button.clicked.connect(self.add_files)
+        self.add_button.clicked.connect(self.on_add_files_clicked)
         self.convert_button.clicked.connect(self.start_conversion)
         self.clear_button.clicked.connect(self.clear_files)
 
