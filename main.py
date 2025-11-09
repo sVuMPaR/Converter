@@ -9,6 +9,7 @@ import os
 import subprocess
 import logging
 import sys
+import tempfile
 from pathlib import Path
 from typing import List, Optional
 
@@ -37,34 +38,33 @@ from PyQt5.QtWidgets import (
 
 # --- Настройка логирования ---
 def setup_logging():
-    """Настраивает логирование в файл с ротацией (в папке с EXE)."""
     logger = logging.getLogger()
-    
-    # Если обработчики уже настроены — не делаем ничего
-    if logger.handlers:
-        return
+
+    # Удаляем старые обработчики
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
 
     logger.setLevel(logging.DEBUG)
 
-    # Форматировщик
     formatter = logging.Formatter(
         '%(asctime)s | %(levelname)s | %(name)s:%(lineno)d | %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # Путь к логу: папка с исполняемым файлом
-    if getattr(sys, 'frozen', False):  # PyInstaller: EXE запущен
+    # Определяем путь к логу
+    if getattr(sys, 'frozen', False):
         exe_dir = Path(sys.executable).parent
-    else:  # Запуск из .py (разработка)
+    else:
         exe_dir = Path(__file__).parent
 
     log_path = exe_dir / "converter.log"
 
-    # Обработчик для файла
+    # Попытка создать файловый обработчик
+    file_handler = None
     try:
         file_handler = RotatingFileHandler(
             str(log_path),
-            maxBytes=5 * 1024 * 1024,  # 5 МБ
+            maxBytes=5 * 1024 * 1024,
             backupCount=3,
             encoding='utf-8',
             errors='replace'
@@ -72,23 +72,47 @@ def setup_logging():
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logging.DEBUG)
         logger.addHandler(file_handler)
+        logger.info(f"Лог-файл: {log_path}")
     except (IOError, OSError) as e:
-        print(f"[LOG] Не удалось открыть лог-файл {log_path}: {e}")
+        print(f"[LOG] Не удалось открыть {log_path}: {e}")
+        # Fallback на Temp
+        temp_log = Path(tempfile.gettempdir()) / "converter.log"
+        try:
+            file_handler = RotatingFileHandler(
+                str(temp_log),
+                maxBytes=5 * 1024 * 1024,
+                backupCount=1,
+                encoding='utf-8'
+            )
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+            logger.info(f"Лог перенаправлен в {temp_log}")
+        except Exception as fallback_e:
+            print(f"[LOG] Не удалось создать лог во временной папке: {fallback_e}")
 
-    # Обработчик для консоли
+    # Консольный обработчик
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.WARNING)
     logger.addHandler(console_handler)
 
-    # Логируем старт
+    # Информативные логи
     logger.info("Запуск конвертера изображений")
+    logger.info(f"Python: {sys.version}")
+    logger.info(f"Система: {sys.platform}")
     logger.debug("PATH: %s", os.environ.get("PATH"))
 
+# Хук для необработанных исключений
+def log_unhandled_exception(exc_type, exc_value, exc_traceback):
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logger = logging.getLogger()
+    logger.critical("Необработанное исключение", exc_info=(exc_type, exc_value, exc_traceback))
 
+sys.excepthook = log_unhandled_exception
 
-
-# Инициализируем логирование
+# Вызов настройки логирования
 setup_logging()
 
 # --- Блок с версиями ---
