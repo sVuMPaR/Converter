@@ -5,14 +5,15 @@ import tempfile
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
+import pillow_heif
 import traceback
 
 # Импорты PyQt5
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QListWidget, QFileDialog, QProgressBar,
-    QMessageBox, QSpinBox, QCheckBox
+    QMessageBox, QSpinBox, QCheckBox, QComboBox
 )
 from PyQt5.QtCore import pyqtSlot
 
@@ -92,12 +93,14 @@ def log_unhandled_exception(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = log_unhandled_exception
 
+SUPPORTED_FORMATS = ["JPG", "JPEG", "PNG", "WEBP", "BMP", "TIFF", "HEIC", "HEIF", "GIF", "ICO"]
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Конвертер изображений в JPG")
-        self.resize(800, 600)
+        self.setWindowTitle("Converter — Конвертер изображений")
+        self.resize(900, 650)
 
         # Центральный виджет
         central_widget = QWidget()
@@ -119,13 +122,33 @@ class MainWindow(QMainWindow):
         self.quality_spin = QSpinBox()
         self.quality_spin.setRange(1, 100)
         self.quality_spin.setValue(85)
-        settings_layout.addWidget(QLabel("Качество JPG:"))
+        settings_layout.addWidget(QLabel("Качество (для форматов с поддержкой качества):"))
         settings_layout.addWidget(self.quality_spin)
 
         self.overwrite_checkbox = QCheckBox("Перезаписывать файлы")
         settings_layout.addWidget(self.overwrite_checkbox)
 
         layout.addLayout(settings_layout)
+
+        # Формат вывода и папка
+        format_layout = QHBoxLayout()
+        format_layout.addWidget(QLabel("Формат вывода:"))
+        self.format_selector = QComboBox()
+        self.format_selector.addItems(SUPPORTED_FORMATS)
+        # По умолчанию JPG
+        self.format_selector.setCurrentText("JPG")
+        format_layout.addWidget(self.format_selector)
+
+        # Кнопка выбора папки вывода
+        output_layout = QHBoxLayout()
+        self.output_button = QPushButton("Выбрать папку для сохранения")
+        self.output_button.clicked.connect(self.select_output_folder)
+        self.output_label = QLabel("📁 По умолчанию: рядом с исходными файлами")
+        output_layout.addWidget(self.output_button)
+        output_layout.addWidget(self.output_label)
+
+        layout.addLayout(format_layout)
+        layout.addLayout(output_layout)
 
         # Кнопки
         button_layout = QHBoxLayout()
@@ -151,7 +174,7 @@ class MainWindow(QMainWindow):
         # Подключение сигналов
         try:
             self.add_button.clicked.connect(self.on_add_files_clicked)
-            self.convert_button.clicked.connect(self.start_conversion)  # ← Здесь была ошибка
+            self.convert_button.clicked.connect(self.start_conversion)
             self.clear_button.clicked.connect(self.clear_files)
             logger.info("Сигналы подключены успешно")
         except Exception as e:
@@ -160,22 +183,24 @@ class MainWindow(QMainWindow):
 
         self.worker_thread = None
         self.worker = None
+        self.output_dir = None
+
+    def select_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Выберите папку для сохранения")
+        if folder:
+            self.output_dir = Path(folder)
+            self.output_label.setText(f"📁 {folder}")
 
     @pyqtSlot()
     def on_add_files_clicked(self):
         try:
             logger.info("=== НАЧАЛО on_add_files_clicked ===")
 
-            # Проверка существования виджета
-            if not hasattr(self, 'file_list'):
-                logger.error("Виджет file_list не создан!")
-                return
-
             file_paths, _ = QFileDialog.getOpenFileNames(
                 self,
                 "Выбрать изображения",
                 "",
-                "Изображения (*.jpg *.jpeg *.png *.heic *.heif *.tiff *.bmp *.webp)"
+                "Изображения (*.jpg *.jpeg *.png *.heic *.heif *.tiff *.bmp *.webp *.gif *.ico)"
             )
 
             logger.debug(f"Получено путей: {len(file_paths)}")
@@ -204,8 +229,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 "Ошибка",
-                f"Произошла ошибка:\n{e}\n\nПроверьте лог converter.log для деталей."
-            )
+                f"Произошла ошибка:{e} Проверьте лог converter.log для деталей.")
 
     @pyqtSlot()
     def start_conversion(self):
@@ -219,8 +243,9 @@ class MainWindow(QMainWindow):
     
             quality = self.quality_spin.value()
             overwrite = self.overwrite_checkbox.isChecked()
+            out_format = self.format_selector.currentText().upper()
     
-            logger.debug(f"Настройки конвертации: качество={quality}, перезапись={overwrite}")
+            logger.debug(f"Настройки конвертации: качество={quality}, перезапись={overwrite}, формат={out_format}")
     
             file_paths = []
             for i in range(self.file_list.count()):
@@ -240,70 +265,108 @@ class MainWindow(QMainWindow):
             self.progress_bar.setRange(0, len(file_paths))
             self.progress_bar.setValue(0)
     
-            # РЕГИСТРАЦИЯ HEIF-ОПЕНЕРА ДЛЯ PILLOW
+            # Регистрация HEIF-опенера для pillow
             try:
-                from pillow_heif import register_heif_opener
-                register_heif_opener()
-                logger.info("Поддержка HEIC активирована через pillow-heif")
-            except ImportError:
-                logger.warning("pillow-heif не установлен. HEIC-файлы не будут конвертированы.")
+                pillow_heif.register_heif_opener()
+                logger.info("Поддержка HEIC/HEIF активирована через pillow-heif")
+            except Exception as e:
+                logger.warning(f"pillow-heif регистрация не удалась: {e}")
     
             for idx, path in enumerate(file_paths):
                 try:
                     logger.debug(f"Конвертируем: {path}")
-    
-                    # ОПРЕДЕЛЯЕМ РАСШИРЕНИЕ
-                    ext = os.path.splitext(path)[1].lower()
-    
-                    if ext == ".heic":
-                        # КОНВЕРТАЦИЯ HEIC ЧЕРЕЗ pillow-heif
-                        try:
-                            from PIL import Image
-                            with Image.open(path) as img:
-                                output_path = os.path.splitext(path)[0] + ".jpg"
-                                if not overwrite and os.path.exists(output_path):
-                                    logger.warning(f"Файл уже существует (пропуск): {output_path}")
-                                    continue
-                                img.convert("RGB").save(
-                                    output_path,
-                                    "JPEG",
-                                    quality=quality,
-                                    optimize=True
-                                )
-                            logger.info(f"Сохранено: {output_path}")
-                        except Exception as e:
-                            logger.error(f"Ошибка при конвертации HEIC {path}: {e}")
-                            QMessageBox.warning(
-                                self,
-                                "Ошибка конвертации HEIC",
-                                f"Не удалось обработать файл:\n{path}\nОшибка: {e}"
-                            )
+
+                    input_path = Path(path)
+                    # Определяем папку вывода
+                    if self.output_dir is not None:
+                        output_dir = self.output_dir
                     else:
-                        # КОНВЕРТАЦИЯ ДРУГИХ ФОРМАТОВ (JPG, PNG и т.д.)
-                        from PIL import Image
-                        with Image.open(path) as img:
-                            output_path = os.path.splitext(path)[0] + ".jpg"
-                            if not overwrite and os.path.exists(output_path):
-                                logger.warning(f"Файл уже существует (пропуск): {output_path}")
-                                continue
-                            img.convert("RGB").save(
-                                output_path,
-                                "JPEG",
-                                quality=quality,
-                                optimize=True
-                            )
-                        logger.info(f"Сохранено: {output_path}")
-    
+                        output_dir = input_path.parent
+
+                    # Создаём папку, если её нет
+                    try:
+                        output_dir.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        logger.warning(f"Не удалось создать папку {output_dir}: {e}")
+
+                    # Определяем целевой файл
+                    ext = out_format.lower()
+                    output_name = f"{input_path.stem}.{ext}"
+                    output_path = output_dir / output_name
+
+                    # Если перезапись запрещена — подставляем уникальное имя
+                    if output_path.exists() and not overwrite:
+                        i = 1
+                        while True:
+                            candidate = output_dir / f"{input_path.stem}_{i}.{ext}"
+                            if not candidate.exists():
+                                output_path = candidate
+                                break
+                            i += 1
+
+                    # Открываем изображение
+                    with Image.open(input_path) as img:
+                        # Подготовка для форматов, требующих RGB
+                        try:
+                            if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                                bg = Image.new("RGB", img.size, (255, 255, 255))
+                                if img.mode != "RGBA":
+                                    img = img.convert("RGBA")
+                                bg.paste(img, mask=img.split()[-1])
+                                rgb = bg
+                            else:
+                                rgb = img.convert("RGB")
+                        except Exception as e:
+                            logger.debug(f"Ошибка подготовки RGB: {e}")
+                            rgb = img.convert("RGB")
+
+                        save_kwargs = {}
+                        # Форматы, у которых поддерживается параметр quality
+                        if out_format in ("JPG", "JPEG", "WEBP", "TIFF"):
+                            save_kwargs["quality"] = quality
+                        # PNG поддерживает optimize
+                        if out_format == "PNG":
+                            save_kwargs["optimize"] = True
+
+                        # Попытка сохранить
+                        try:
+                            # Если пользователь выбрал HEIC/HEIF — попробуем через pillow-heif
+                            if out_format in ("HEIC", "HEIF"):
+                                try:
+                                    # pillow_heif поддерживает сохранение через метод from_pillow
+                                    heif_bytes = pillow_heif.from_pillow(rgb, quality=quality)
+                                    with open(output_path, "wb") as f:
+                                        f.write(heif_bytes)
+                                except Exception as e:
+                                    logger.warning(f"Сохранение HEIF напрямую не удалось: {e}. Попробуем сохранить через JPEG как fallback.")
+                                    rgb.save(output_path.with_suffix('.jpg'), "JPEG", quality=quality, optimize=True)
+                            else:
+                                # Обычные форматы через Pillow
+                                fmt = "JPEG" if out_format in ("JPG", "JPEG") else out_format
+                                rgb.save(output_path, fmt, **save_kwargs)
+
+                            logger.info(f"Сохранено: {output_path}")
+
+                        except Exception as e:
+                            logger.error(f"Ошибка сохранения {output_path}: {e}")
+                            # Попытка fallback сохранить как JPEG
+                            try:
+                                fallback = output_path.with_suffix('.jpg')
+                                rgb.save(fallback, "JPEG", quality=quality, optimize=True)
+                                logger.info(f"Сохранено fallback: {fallback}")
+                            except Exception as e2:
+                                logger.error(f"Fallback тоже не удался: {e2}")
+                                raise
+
                     self.progress_bar.setValue(idx + 1)
                     self.status_bar.setText(f"Конвертировано {idx + 1}/{len(file_paths)}")
-    
+
+                except UnidentifiedImageError as e:
+                    logger.error(f"Не удалось определить формат изображения {path}: {e}")
+                    QMessageBox.warning(self, "Ошибка конвертации", f"Не удалось определить формат файла:{path}Ошибка: {e}")
                 except Exception as e:
-                    logger.error(f"Ошибка при конвертации {path}: {e}")
-                    QMessageBox.warning(
-                        self,
-                        "Ошибка конвертации",
-                        f"Не удалось обработать файл:\n{path}\nОшибка: {e}"
-                    )
+                    logger.error(f"Ошибка при конвертации {path}: {e}", exc_info=True)
+                    QMessageBox.warning(self, "Ошибка конвертации", f"Не удалось обработать файл:{path} Ошибка: {e}")
     
             self.status_bar.setText("Конвертация завершена")
             QMessageBox.information(self, "Готово", "Конвертация выполнена успешно!")
@@ -313,10 +376,8 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 "Критическая ошибка",
-                f"Произошла ошибка при конвертации:\n{e}\n\nПроверьте лог converter.log для деталей."
+                f"Произошла ошибка при конвертации:{e} Проверьте лог converter.log для деталей."
             )
-    
-                
 
     @pyqtSlot()
     def clear_files(self):
@@ -328,7 +389,6 @@ class MainWindow(QMainWindow):
             logger.info("Список файлов очищен")
         except Exception as e:
             logger.critical(f"Ошибка в clear_files: {e}", exc_info=True)
-
 
 
 # Основной запуск
