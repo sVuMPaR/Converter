@@ -277,8 +277,8 @@ class MainWindow(QMainWindow):
                 logger.info(f"Сохранено HEIC: {file_path}")
             except Exception as e:
                 logger.warning(f"HEIC прямое сохранение не удалось: {e}. Сохраняю как JPEG fallback.")
-                fallback_path = file_path.replace(".heic", ".jpg")
                 img.save(fallback_path, "JPEG", quality=quality)
+                fallback_path = file_path.replace(".heic", ".jpg")
                 logger.info(f"Сохранено JPEG fallback: {fallback_path}")
     
             for idx, path in enumerate(file_paths):
