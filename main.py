@@ -438,9 +438,9 @@ class MainWindow(QMainWindow):
             # Обновляем статус-бар
             self.status_bar.setText(f"Добавлено {added_count} файлов")
 
-    except Exception as e:
-        logger.critical(f"Ошибка в on_add_files_clicked: {e}", exc_info=True)
-        QMessageBox.critical(self, "Критическая ошибка", str(e))
+        except Exception as e:
+            logger.critical(f"Ошибка в on_add_files_clicked: {e}", exc_info=True)
+            QMessageBox.critical(self, "Критическая ошибка", str(e))
 
     def process_files_in_background(self, file_paths):
         """Запускает обработку файлов в отдельном потоке"""
