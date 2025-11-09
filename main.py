@@ -137,7 +137,6 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.convert_button)
         button_layout.addWidget(self.clear_button)
 
-
         layout.addLayout(button_layout)
 
         # Прогресс-бар
@@ -149,17 +148,16 @@ class MainWindow(QMainWindow):
         self.status_bar = QLabel("Готов к работе")
         layout.addWidget(self.status_bar)
 
-        # Подключение сигналов (с проверкой)
+        # Подключение сигналов
         try:
             self.add_button.clicked.connect(self.on_add_files_clicked)
-            self.convert_button.clicked.connect(self.start_conversion)
+            self.convert_button.clicked.connect(self.start_conversion)  # ← Здесь была ошибка
             self.clear_button.clicked.connect(self.clear_files)
             logger.info("Сигналы подключены успешно")
         except Exception as e:
             logger.critical(f"Ошибка подключения сигналов: {e}", exc_info=True)
             QMessageBox.critical(self, "Критическая ошибка", f"Не удалось подключить сигналы: {e}")
 
-        # Рабочий поток
         self.worker_thread = None
         self.worker = None
 
@@ -209,86 +207,81 @@ class MainWindow(QMainWindow):
                 f"Произошла ошибка:\n{e}\n\nПроверьте лог converter.log для деталей."
             )
 
-@pyqtSlot()
-def start_conversion(self):
-    try:
-        logger.info("=== НАЧАЛО start_conversion ===")
+    @pyqtSlot()
+    def start_conversion(self):  # ← Этот метод должен быть здесь!
+        try:
+            logger.info("=== НАЧАЛО start_conversion ===")
+
+            if self.file_list.count() == 0:
+                logger.warning("Нет файлов для конвертации")
+                QMessageBox.warning(self, "Предупреждение", "Добавьте файлы перед конвертацией")
+                return
+
+            quality = self.quality_spin.value()
+            overwrite = self.overwrite_checkbox.isChecked()
+
+            logger.debug(f"Настройки конвертации: качество={quality}, перезапись={overwrite}")
+
+            file_paths = []
+            for i in range(self.file_list.count()):
+                file_path = self.file_list.item(i).text()
+                if os.path.isfile(file_path):
+                    file_paths.append(file_path)
+                else:
+                    logger.warning(f"Файл не существует (пропущен): {file_path}")
+
+            if not file_paths:
+                logger.error("Нет валидных файлов для конвертации")
+                QMessageBox.critical(self, "Ошибка", "Нет доступных файлов для конвертации")
+                return
+
+            logger.info(f"Начинаем конвертацию {len(file_paths)} файлов")
 
 
-        if self.file_list.count() == 0:
-            logger.warning("Нет файлов для конвертации")
-            QMessageBox.warning(self, "Предупреждение", "Добавьте файлы перед конвертацией")
-            return
+            self.progress_bar.setRange(0, len(file_paths))
+            self.progress_bar.setValue(0)
 
-        quality = self.quality_spin.value()
-        overwrite = self.overwrite_checkbox.isChecked()
+            for idx, path in enumerate(file_paths):
+                try:
+                    logger.debug(f"Конвертируем: {path}")
 
-        logger.debug(f"Настройки конвертации: качество={quality}, перезапись={overwrite}")
+                    from PIL import Image
+                    with Image.open(path) as img:
+                        output_path = os.path.splitext(path)[0] + ".jpg"
 
-        file_paths = []
-        for i in range(self.file_list.count()):
-            file_path = self.file_list.item(i).text()
-            if os.path.isfile(file_path):
-                file_paths.append(file_path)
-            else:
-                logger.warning(f"Файл не существует (пропущен): {file_path}")
+                        if not overwrite and os.path.exists(output_path):
+                            logger.warning(f"Файл уже существует (пропуск): {output_path}")
+                            continue
 
-        if not file_paths:
-            logger.error("Нет валидных файлов для конвертации")
-            QMessageBox.critical(self, "Ошибка", "Нет доступных файлов для конвертации")
-            return
+                        img.convert("RGB").save(
+                            output_path,
+                            "JPEG",
+                            quality=quality,
+                            optimize=True
+                        )
 
-        logger.info(f"Начинаем конвертацию {len(file_paths)} файлов")
+                    logger.info(f"Сохранено: {output_path}")
+                    self.progress_bar.setValue(idx + 1)
+                    self.status_bar.setText(f"Конвертировано {idx + 1}/{len(file_paths)}")
 
-        self.progress_bar.setRange(0, len(file_paths))
-        self.progress_bar.setValue(0)
-
-        for idx, path in enumerate(file_paths):
-            try:
-                logger.debug(f"Конвертируем: {path}")
-
-                # Открываем изображение
-                with Image.open(path) as img:
-                    # Определяем выходной путь
-                    output_path = os.path.splitext(path)[0] + ".jpg"
-
-
-                    # Если перезапись запрещена и файл существует — пропускаем
-                    if not overwrite and os.path.exists(output_path):
-                        logger.warning(f"Файл уже существует (пропуск): {output_path}")
-                        continue
-
-                    # Конвертируем в JPG
-                    img.convert("RGB").save(
-                        output_path,
-                        "JPEG",
-                        quality=quality,
-                        optimize=True
+                except Exception as e:
+                    logger.error(f"Ошибка при конвертации {path}: {e}")
+                    QMessageBox.warning(
+                        self,
+                        "Ошибка конвертации",
+                        f"Не удалось обработать файл:\n{path}\nОшибка: {e}"
                     )
 
-                logger.info(f"Сохранено: {output_path}")
-                self.progress_bar.setValue(idx + 1)
-                self.status_bar.setText(f"Конвертировано {idx + 1}/{len(file_paths)}")
+            self.status_bar.setText("Конвертация завершена")
+            QMessageBox.information(self, "Готово", "Конвертация выполнена успешно!")
 
-
-            except Exception as e:
-                logger.error(f"Ошибка при конвертации {path}: {e}\n{traceback.format_exc()}")
-                QMessageBox.warning(
-                    self,
-                    "Ошибка конвертации",
-                    f"Не удалось обработать файл:\n{path}\nОшибка: {e}"
-                )
-
-        self.status_bar.setText("Конвертация завершена")
-        QMessageBox.information(self, "Готово", "Конвертация выполнена успешно!")
-
-    except Exception as e:
-        logger.critical(f"ФАТАЛЬНАЯ ОШИБКА в start_conversion: {type(e).__name__}: {e}", exc_info=True)
-        QMessageBox.critical(
-            self,
-            "Критическая ошибка",
-            f"Произошла ошибка при конвертации:\n{e}\n\nПроверьте лог converter.log для деталей."
-        )
+        except Exception as e:
+            logger.critical(f"ФАТАЛЬНАЯ ОШИБКА в start_conversion: {type(e).__name__}: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Критическая ошибка",
+                f"Произошла ошибка при конвертации:\n{e}\n\nПроверьте лог converter.log для деталей."
+            )
             
 
     @pyqtSlot()
