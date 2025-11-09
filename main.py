@@ -49,7 +49,7 @@ def setup_logging():
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logging.DEBUG)
         logger.addHandler(file_handler)
-        logger.info(f!Лог-файл: {log_path}")
+        logger.info(f"Лог-файл: {log_path}")
     except (IOError, OSError) as e:
         print(f"[LOG] Не удалось открыть {log_path}: {e}")
         # Fallback на Temp
