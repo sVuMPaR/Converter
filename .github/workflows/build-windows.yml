@@ -37,7 +37,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           if exist requirements.txt (
             pip install -r requirements.txt
           )
@@ -53,18 +53,19 @@ jobs:
             --windowed ^
             --name converter ^
             main.py
-          
+
           if not exist "dist\converter.exe" (
-            echo "Build failed: dist\converter.exe not found!"
+            echo Build failed: dist\converter.exe not found!
             exit /b 1
           )
-          echo "Executable created: dist\converter.exe"
 
-      - name: Upload Artifact (for debugging)
+          echo Executable created: dist\converter.exe
+
+      - name: Upload Artifact (wildcard + rename)
         uses: actions/upload-artifact@v4
         with:
           name: converter
-          path: dist/converter.exe
+          path: "**/converter.exe"
           if-no-files-found: error
 
   release:
@@ -79,12 +80,21 @@ jobs:
           name: converter
           path: dist
 
+      - name: Determine version and rename file
+        id: version
+        run: |
+          VERSION=${{ github.event.inputs.tag || github.ref_name }}
+          CLEAN_VERSION=${VERSION#refs/tags/}
+          NEW_NAME="MyApp-${CLEAN_VERSION}.exe"
+          mv dist/converter.exe "dist/${NEW_NAME}"
+          echo "version_name=${NEW_NAME}" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.event.inputs.tag || github.ref_name }}
           name: Release ${{ github.event.inputs.tag || github.ref_name }}
-          artifacts: dist/converter.exe:MyApp-${{ github.ref_name }}.exe
+          artifacts: dist/${{ steps.version.outputs.version_name }}
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          allowUpdates: true  # перезаписывать релиз при повторном запуске
+          allowUpdates: true
