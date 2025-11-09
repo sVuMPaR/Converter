@@ -267,10 +267,19 @@ class MainWindow(QMainWindow):
     
             # Регистрация HEIF-опенера для pillow
             try:
-                pillow_heif.register_heif_opener()
-                logger.info("Поддержка HEIC/HEIF активирована через pillow-heif")
+                heif_image = pillow_heif.from_pillow(img)
+                pillow_heif.write_heif(
+                    heif_image,
+                    file_path,
+                    quality=quality,
+                    save_mode="lossy",
+                )
+                logger.info(f"Сохранено HEIC: {file_path}")
             except Exception as e:
-                logger.warning(f"pillow-heif регистрация не удалась: {e}")
+                logger.warning(f"HEIC прямое сохранение не удалось: {e}. Сохраняю как JPEG fallback.")
+                fallback_path = file_path.replace(".heic", ".jpg")
+                img.save(fallback_path, "JPEG", quality=quality)
+                logger.info(f"Сохранено JPEG fallback: {fallback_path}")
     
             for idx, path in enumerate(file_paths):
                 try:
