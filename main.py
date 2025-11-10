@@ -231,138 +231,138 @@ class MainWindow(QMainWindow):
                 "Ошибка",
                 f"Произошла ошибка:{e} Проверьте лог converter.log для деталей.")
 
-@pyqtSlot()
-def start_conversion(self):
-    try:
-        logger.info("=== НАЧАЛО start_conversion ===")
-
-        if self.file_list.count() == 0:
-            logger.warning("Нет файлов для конвертации")
-            QMessageBox.warning(self, "Предупреждение", "Добавьте файлы перед конвертацией")
-            return
-
-        quality = self.quality_spin.value()
-        overwrite = self.overwrite_checkbox.isChecked()
-        out_format = self.format_selector.currentText().upper()
-
-        logger.debug(f"Настройки конвертации: качество={quality}, перезапись={overwrite}, формат={out_format}")
-
-        file_paths = []
-        for i in range(self.file_list.count()):
-            file_path = self.file_list.item(i).text()
-            if os.path.isfile(file_path):
-                file_paths.append(file_path)
-            else:
-                logger.warning(f"Файл не существует (пропущен): {file_path}")
-
-        if not file_paths:
-            logger.error("Нет валидных файлов для конвертации")
-            QMessageBox.critical(self, "Ошибка", "Нет доступных файлов для конвертации")
-            return
-
-        self.progress_bar.setRange(0, len(file_paths))
-        self.progress_bar.setValue(0)
-
-        # Регистрируем поддержку HEIC/HEIF
+    @pyqtSlot()
+    def start_conversion(self):
         try:
-            pillow_heif.register_heif_opener()
-            logger.info("Поддержка HEIC/HEIF активирована")
-        except Exception as e:
-            logger.warning(f"Не удалось зарегистрировать pillow-heif: {e}")
-
-        for idx, path in enumerate(file_paths):
-            input_path = Path(path)
-            output_dir = self.output_dir or input_path.parent
-
-            try:
-                output_dir.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
-                logger.warning(f"Не удалось создать папку {output_dir}: {e}")
-
-            ext = out_format.lower()
-            output_name = f"{input_path.stem}.{ext}"
-            output_path = output_dir / output_name
-
-            # Если перезапись запрещена — подставляем уникальное имя
-            if output_path.exists() and not overwrite:
-                i = 1
-                while True:
-                    candidate = output_dir / f"{input_path.stem}_{i}.{ext}"
-                    if not candidate.exists():
-                        output_path = candidate
-                        break
-                    i += 1
-
-            img = None
-            try:
-                with Image.open(input_path) as im:
-                    img = im.copy()  # создаём копию в памяти
-            except UnidentifiedImageError as e:
-                logger.error(f"Не удалось определить формат изображения {path}: {e}")
-                QMessageBox.warning(self, "Ошибка конвертации", f"Формат не поддерживается:\n{path}")
-                continue
-            except Exception as e:
-                logger.error(f"Ошибка открытия файла {path}: {e}")
-                continue
-
-            # Подготовка RGB
-            try:
-                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
-                    bg = Image.new("RGB", img.size, (255, 255, 255))
-                    if img.mode != "RGBA":
-                        img = img.convert("RGBA")
-                    bg.paste(img, mask=img.split()[-1])
-                    rgb = bg
+            logger.info("=== НАЧАЛО start_conversion ===")
+    
+            if self.file_list.count() == 0:
+                logger.warning("Нет файлов для конвертации")
+                QMessageBox.warning(self, "Предупреждение", "Добавьте файлы перед конвертацией")
+                return
+    
+            quality = self.quality_spin.value()
+            overwrite = self.overwrite_checkbox.isChecked()
+            out_format = self.format_selector.currentText().upper()
+    
+            logger.debug(f"Настройки конвертации: качество={quality}, перезапись={overwrite}, формат={out_format}")
+    
+            file_paths = []
+            for i in range(self.file_list.count()):
+                file_path = self.file_list.item(i).text()
+                if os.path.isfile(file_path):
+                    file_paths.append(file_path)
                 else:
+                    logger.warning(f"Файл не существует (пропущен): {file_path}")
+    
+            if not file_paths:
+                logger.error("Нет валидных файлов для конвертации")
+                QMessageBox.critical(self, "Ошибка", "Нет доступных файлов для конвертации")
+                return
+    
+            self.progress_bar.setRange(0, len(file_paths))
+            self.progress_bar.setValue(0)
+    
+            # Регистрируем поддержку HEIC/HEIF
+            try:
+                pillow_heif.register_heif_opener()
+                logger.info("Поддержка HEIC/HEIF активирована")
+            except Exception as e:
+                logger.warning(f"Не удалось зарегистрировать pillow-heif: {e}")
+    
+            for idx, path in enumerate(file_paths):
+                input_path = Path(path)
+                output_dir = self.output_dir or input_path.parent
+    
+                try:
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    logger.warning(f"Не удалось создать папку {output_dir}: {e}")
+    
+                ext = out_format.lower()
+                output_name = f"{input_path.stem}.{ext}"
+                output_path = output_dir / output_name
+    
+                # Если перезапись запрещена — подставляем уникальное имя
+                if output_path.exists() and not overwrite:
+                    i = 1
+                    while True:
+                        candidate = output_dir / f"{input_path.stem}_{i}.{ext}"
+                        if not candidate.exists():
+                            output_path = candidate
+                            break
+                        i += 1
+    
+                img = None
+                try:
+                    with Image.open(input_path) as im:
+                        img = im.copy()  # создаём копию в памяти
+                except UnidentifiedImageError as e:
+                    logger.error(f"Не удалось определить формат изображения {path}: {e}")
+                    QMessageBox.warning(self, "Ошибка конвертации", f"Формат не поддерживается:\n{path}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Ошибка открытия файла {path}: {e}")
+                    continue
+    
+                # Подготовка RGB
+                try:
+                    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                        bg = Image.new("RGB", img.size, (255, 255, 255))
+                        if img.mode != "RGBA":
+                            img = img.convert("RGBA")
+                        bg.paste(img, mask=img.split()[-1])
+                        rgb = bg
+                    else:
+                        rgb = img.convert("RGB")
+                except Exception as e:
+                    logger.debug(f"Ошибка при конвертации в RGB: {e}")
                     rgb = img.convert("RGB")
-            except Exception as e:
-                logger.debug(f"Ошибка при конвертации в RGB: {e}")
-                rgb = img.convert("RGB")
-
-            save_kwargs = {}
-            if out_format in ("JPG", "JPEG", "WEBP", "TIFF"):
-                save_kwargs["quality"] = quality
-            if out_format == "PNG":
-                save_kwargs["optimize"] = True
-
-            try:
-                if out_format in ("HEIC", "HEIF"):
-                    try:
-                        heif_data = pillow_heif.from_pillow(rgb)
-                        pillow_heif.write_heif(
-                            heif_data,
-                            output_path,
-                            quality=quality,
-                            save_mode="lossy",
-                        )
-                        logger.info(f"Сохранено HEIF: {output_path}")
-                    except Exception as e:
-                        logger.warning(f"Сохранение HEIF напрямую не удалось: {e}. Сохраняю JPEG fallback.")
-                        fallback_path = output_path.with_suffix(".jpg")
-                        rgb.save(fallback_path, "JPEG", quality=quality, optimize=True)
-                        logger.info(f"Сохранено JPEG fallback: {fallback_path}")
-                else:
-                    fmt = "JPEG" if out_format in ("JPG", "JPEG") else out_format
-                    rgb.save(output_path, fmt, **save_kwargs)
-                    logger.info(f"Сохранено: {output_path}")
-
-            except Exception as e:
-                logger.error(f"Ошибка сохранения {output_path}: {e}", exc_info=True)
-                QMessageBox.warning(self, "Ошибка", f"Ошибка при сохранении:\n{output_path}\n{e}")
-
-            self.progress_bar.setValue(idx + 1)
-            self.status_bar.setText(f"Конвертировано {idx + 1}/{len(file_paths)}")
-
-        self.status_bar.setText("Конвертация завершена")
-        QMessageBox.information(self, "Готово", "Конвертация выполнена успешно!")
-
-    except Exception as e:
-        logger.critical(f"ФАТАЛЬНАЯ ОШИБКА в start_conversion: {type(e).__name__}: {e}", exc_info=True)
-        QMessageBox.critical(
-            self,
-            "Критическая ошибка",
-            f"Произошла ошибка при конвертации:\n{e}\n\nПроверьте лог converter.log для деталей."
-        )
+    
+                save_kwargs = {}
+                if out_format in ("JPG", "JPEG", "WEBP", "TIFF"):
+                    save_kwargs["quality"] = quality
+                if out_format == "PNG":
+                    save_kwargs["optimize"] = True
+    
+                try:
+                    if out_format in ("HEIC", "HEIF"):
+                        try:
+                            heif_data = pillow_heif.from_pillow(rgb)
+                            pillow_heif.write_heif(
+                                heif_data,
+                                output_path,
+                                quality=quality,
+                                save_mode="lossy",
+                            )
+                            logger.info(f"Сохранено HEIF: {output_path}")
+                        except Exception as e:
+                            logger.warning(f"Сохранение HEIF напрямую не удалось: {e}. Сохраняю JPEG fallback.")
+                            fallback_path = output_path.with_suffix(".jpg")
+                            rgb.save(fallback_path, "JPEG", quality=quality, optimize=True)
+                            logger.info(f"Сохранено JPEG fallback: {fallback_path}")
+                    else:
+                        fmt = "JPEG" if out_format in ("JPG", "JPEG") else out_format
+                        rgb.save(output_path, fmt, **save_kwargs)
+                        logger.info(f"Сохранено: {output_path}")
+    
+                except Exception as e:
+                    logger.error(f"Ошибка сохранения {output_path}: {e}", exc_info=True)
+                    QMessageBox.warning(self, "Ошибка", f"Ошибка при сохранении:\n{output_path}\n{e}")
+    
+                self.progress_bar.setValue(idx + 1)
+                self.status_bar.setText(f"Конвертировано {idx + 1}/{len(file_paths)}")
+    
+            self.status_bar.setText("Конвертация завершена")
+            QMessageBox.information(self, "Готово", "Конвертация выполнена успешно!")
+    
+        except Exception as e:
+            logger.critical(f"ФАТАЛЬНАЯ ОШИБКА в start_conversion: {type(e).__name__}: {e}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Критическая ошибка",
+                f"Произошла ошибка при конвертации:\n{e}\n\nПроверьте лог converter.log для деталей."
+            )
 
     @pyqtSlot()
     def clear_files(self):
