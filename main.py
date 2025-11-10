@@ -178,14 +178,40 @@ def get_latest_release_info():
         )
         with urllib.request.urlopen(req, timeout=5) as resp:
             if resp.status != 200:
-                logger.warning(f"GitHub API статус {resp.status}")
+                # Не считаем это ошибкой приложения, просто фиксируем инфу
+                logger.info(
+                    f"Проверка обновлений: сервер вернул статус {resp.status}, "
+                    f"обновления пропущены."
+                )
                 return None
+
             data = json.loads(resp.read().decode("utf-8"))
             return data
+
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            # Для 404: это чаще всего отсутствие релизов или неверный URL
+            logger.info(
+                "Проверка обновлений: релиз не найден (404). "
+                "Возможно, ещё нет опубликованных релизов."
+            )
+        else:
+            logger.info(
+                f"Проверка обновлений: HTTP {e.code}, обновления пропущены."
+            )
     except urllib.error.URLError as e:
-        logger.info(f"Не удалось проверить обновления (сеть): {e}")
+        # Проблемы сети — тоже не критично, просто информируем
+        logger.info(
+            f"Проверка обновлений: нет доступа к GitHub ({e}). Обновления пропущены."
+        )
     except Exception as e:
-        logger.info(f"Ошибка при проверке обновлений: {e}", exc_info=True)
+        # Любые другие ошибки — логируем как info, чтобы не пугать
+        logger.info(
+            f"Проверка обновлений: внутренняя ошибка ({type(e).__name__}: {e}). "
+            f"Обновления пропущены.",
+            exc_info=False,
+        )
+
     return None
 
 
@@ -202,11 +228,13 @@ def check_for_updates(parent=None):
     tag = info.get("tag_name") or ""
     latest_version = tag.strip()
     if not latest_version:
+        logger.info("Проверка обновлений: поле tag_name отсутствует, пропускаю.")        
         return
 
     if not is_newer_version(latest_version, CURRENT_VERSION):
         logger.info(
-            f"Текущая версия {CURRENT_VERSION} актуальна (последняя {latest_version})"
+            f"Текущая версия {CURRENT_VERSION}"
+            f"Актуальна (последняя {latest_version})."
         )
         return
 
