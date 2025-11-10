@@ -231,6 +231,54 @@ class MainWindow(QMainWindow):
                 "Ошибка",
                 f"Произошла ошибка:{e} Проверьте лог converter.log для деталей.")
 
+    def save_heif_safe(img: Image.Image, output_path: Path, quality: int = 85, fallback_format: str = "JPG") -> bool:
+        """
+        Безопасно сохраняет изображение в HEIC/HEIF, если библиотека поддерживает это.
+        При ошибке сохраняет fallback в указанный формат (например, JPG, PNG и т.д.).
+        Возвращает True при успешном сохранении HEIC, False если использован fallback.
+        """
+        import pillow_heif
+        logger = logging.getLogger(__name__)
+    
+        try:
+            # Старый API (до v1.0)
+            if hasattr(pillow_heif, "write_heif"):
+                heif_data = pillow_heif.from_pillow(img)
+                pillow_heif.write_heif(
+                    heif_data,
+                    output_path,
+                    quality=quality,
+                    save_mode="lossy",
+                )
+                logger.info(f"Сохранено в HEIC (через write_heif): {output_path}")
+                return True
+    
+            # Новый API (v1.x.x) — write_heif отсутствует
+            elif hasattr(pillow_heif, "from_pillow"):
+                logger.warning("write_heif() отсутствует. Прямая запись HEIC невозможна.")
+                # fallback
+                fallback_path = output_path.with_suffix(f'.{fallback_format.lower()}')
+                img.convert("RGB").save(fallback_path, fallback_format.upper(), quality=quality, optimize=True)
+                logger.info(f"Сохранено fallback ({fallback_format.upper()}): {fallback_path}")
+                return False
+    
+            else:
+                logger.warning("pillow-heif не поддерживает сохранение HEIC в этой версии.")
+                fallback_path = output_path.with_suffix(f'.{fallback_format.lower()}')
+                img.convert("RGB").save(fallback_path, fallback_format.upper(), quality=quality, optimize=True)
+                logger.info(f"Сохранено fallback ({fallback_format.upper()}): {fallback_path}")
+                return False
+    
+        except Exception as e:
+            logger.warning(f"Ошибка при сохранении HEIC: {e}. Использую fallback.")
+            try:
+                fallback_path = output_path.with_suffix(f'.{fallback_format.lower()}')
+                img.convert("RGB").save(fallback_path, fallback_format.upper(), quality=quality, optimize=True)
+                logger.info(f"Сохранено fallback ({fallback_format.upper()}): {fallback_path}")
+            except Exception as e2:
+                logger.error(f"Ошибка fallback сохранения: {e2}")
+            return False
+    
     @pyqtSlot()
     def start_conversion(self):
         try:
@@ -327,15 +375,15 @@ class MainWindow(QMainWindow):
     
                 try:
                     if out_format in ("HEIC", "HEIF"):
-                        try:
-                            heif_data = pillow_heif.from_pillow(rgb)
-                            pillow_heif.write_heif(
-                                heif_data,
-                                output_path,
-                                quality=quality,
-                                save_mode="lossy",
-                            )
-                            logger.info(f"Сохранено HEIF: {output_path}")
+                        # безопасная функция с fallback
+                        success = save_heif_safe(
+                            rgb,
+                            output_path,
+                            quality,
+                            fallback_format=self.format_selector.currentText()
+                        )
+                        if not success:
+                            logger.warning(f"Формат HEIC недоступен, fallback в {self.format_selector.currentText().upper()}")
                         except Exception as e:
                             logger.warning(f"Сохранение HEIF напрямую не удалось: {e}. Сохраняю JPEG fallback.")
                             fallback_path = output_path.with_suffix(".jpg")
