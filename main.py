@@ -384,22 +384,22 @@ class MainWindow(QMainWindow):
                         )
                         if not success:
                             logger.warning(f"Формат HEIC недоступен, fallback в {self.format_selector.currentText().upper()}")
-                        except Exception as e:
-                            logger.warning(f"Сохранение HEIF напрямую не удалось: {e}. Сохраняю JPEG fallback.")
-                            fallback_path = output_path.with_suffix(".jpg")
-                            rgb.save(fallback_path, "JPEG", quality=quality, optimize=True)
-                            logger.info(f"Сохранено JPEG fallback: {fallback_path}")
-                    else:
-                        fmt = "JPEG" if out_format in ("JPG", "JPEG") else out_format
-                        rgb.save(output_path, fmt, **save_kwargs)
-                        logger.info(f"Сохранено: {output_path}")
-    
                 except Exception as e:
-                    logger.error(f"Ошибка сохранения {output_path}: {e}", exc_info=True)
-                    QMessageBox.warning(self, "Ошибка", f"Ошибка при сохранении:\n{output_path}\n{e}")
+                    logger.warning(f"Сохранение HEIF напрямую не удалось: {e}. Сохраняю JPEG fallback.")
+                    fallback_path = output_path.with_suffix(".jpg")
+                    rgb.save(fallback_path, "JPEG", quality=quality, optimize=True)
+                    logger.info(f"Сохранено JPEG fallback: {fallback_path}")
+                else:
+                    fmt = "JPEG" if out_format in ("JPG", "JPEG") else out_format
+                    rgb.save(output_path, fmt, **save_kwargs)
+                    logger.info(f"Сохранено: {output_path}")
     
-                self.progress_bar.setValue(idx + 1)
-                self.status_bar.setText(f"Конвертировано {idx + 1}/{len(file_paths)}")
+        except Exception as e:
+            logger.error(f"Ошибка сохранения {output_path}: {e}", exc_info=True)
+            QMessageBox.warning(self, "Ошибка", f"Ошибка при сохранении:\n{output_path}\n{e}")
+    
+            self.progress_bar.setValue(idx + 1)
+            self.status_bar.setText(f"Конвертировано {idx + 1}/{len(file_paths)}")
     
             self.status_bar.setText("Конвертация завершена")
             QMessageBox.information(self, "Готово", "Конвертация выполнена успешно!")
