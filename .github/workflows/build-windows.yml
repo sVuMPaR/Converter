@@ -37,7 +37,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           if exist requirements.txt (
             pip install -r requirements.txt
           )
@@ -53,18 +53,19 @@ jobs:
             --windowed ^
             --name converter ^
             main.py
-          
+
           if not exist "dist\converter.exe" (
-            echo "Build failed: dist\converter.exe not found!"
+            echo Build failed: dist\converter.exe not found!
             exit /b 1
           )
-          echo "Executable created: dist\converter.exe"
 
-      - name: Upload Artifact (for debugging)
+          echo Executable created: dist\converter.exe
+
+      - name: Upload Artifact (wildcard + rename)
         uses: actions/upload-artifact@v4
         with:
-          name: converter-exe
-          path: dist/converter.exe
+          name: converter
+          path: "**/converter.exe"
           if-no-files-found: error
 
   release:
