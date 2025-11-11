@@ -53,7 +53,8 @@ def detect_current_version() -> str:
     # 2. Попытка через version.txt
     try:
         if getattr(sys, "frozen", False):
-            base_dir = Path(sys.executable).resolve().parent
+            # Для PyInstaller onefile данные лежат в sys._MEIPASS
+            base_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
         else:
             base_dir = Path(__file__).resolve().parent
 
