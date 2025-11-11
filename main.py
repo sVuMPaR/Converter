@@ -70,7 +70,7 @@ SUPPORTED_EXTS = {f".{ext.lower()}" for ext in SUPPORTED_FORMATS}
 #     return "0.0.0"
 
 
-CURRENT_VERSION = 1.0.1.3
+CURRENT_VERSION = "1.0.1.3"
 GITHUB_API_LATEST = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
 # -------- Логирование --------
