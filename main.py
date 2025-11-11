@@ -7,49 +7,50 @@ from logging.handlers import RotatingFileHandler
 
 from PIL import Image, UnidentifiedImageError
 import pillow_heif
-import traceback
 import json
 import urllib.request
 import urllib.error
 import webbrowser
 import shutil
 
-# Импорты PyQt5
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QListWidget, QFileDialog, QProgressBar,
     QMessageBox, QSpinBox, QCheckBox, QComboBox
 )
-from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtCore import pyqtSlot, Qt, QUrl
 
-# Константы версии и репозитория
+# -------- Константы --------
+
 REPO_OWNER = "sVuMPaR"
 REPO_NAME = "Converter"
+
+SUPPORTED_FORMATS = ["JPG", "JPEG", "PNG", "WEBP", "BMP", "TIFF", "HEIC", "HEIF", "GIF", "ICO"]
+SUPPORTED_EXTS = {f".{ext.lower()}" for ext in SUPPORTED_FORMATS}
+
+# -------- Определение версии --------
 
 def detect_current_version() -> str:
     """
     Определяет текущую версию приложения:
-    1) Если есть git-репозиторий — пробует взять последний тег через git.
+    1) Если есть git-репозиторий — берёт последний тег через git.
     2) Если есть файл version.txt рядом с main.py / exe — читает из него.
     3) Иначе возвращает "0.0.0".
     """
-    # 1. Попытка через git (если не в frozen-сборке и git доступен)
+    # 1. Попытка через git (запуск из исходников, не frozen)
     try:
         if not getattr(sys, "frozen", False):
-            from subprocess import check_output, CalledProcessError
-
-            # Путь к корню проекта (папка, где лежит main.py)
+            from subprocess import check_output
             base_dir = Path(__file__).resolve().parent
-
-            # git describe --tags --abbrev=0 даст последний тег (например, v1.0.3)
             cmd = ["git", "-C", str(base_dir), "describe", "--tags", "--abbrev=0"]
-            tag = check_output(cmd, stderr=open(os.devnull, "wb")).decode("utf-8").strip()
+            with open(os.devnull, "wb") as devnull:
+                tag = check_output(cmd, stderr=devnull).decode("utf-8").strip()
             if tag:
-                return tag  # вернем с префиксом v, parse_version это переварит
+                return tag  # parse_version уберёт префикс v при сравнении
     except Exception:
         pass
 
-    # 2. Попытка через файл version.txt (подходит для собранных exe)
+    # 2. Попытка через version.txt
     try:
         if getattr(sys, "frozen", False):
             base_dir = Path(sys.executable).resolve().parent
@@ -71,14 +72,11 @@ def detect_current_version() -> str:
 CURRENT_VERSION = detect_current_version()
 GITHUB_API_LATEST = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
-SUPPORTED_FORMATS = ["JPG", "JPEG", "PNG", "WEBP", "BMP", "TIFF", "HEIC", "HEIF", "GIF", "ICO"]
+# -------- Логирование --------
 
-
-# Настройка логирования
 def setup_logging():
     logger = logging.getLogger()
 
-    # Удаляем старые обработчики
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
 
@@ -89,15 +87,14 @@ def setup_logging():
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    # Определяем путь к логу
-    if getattr(sys, "frozen", False):  # PyInstaller
+    # Путь к лог-файлу
+    if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).parent
     else:
         exe_dir = Path(__file__).parent
 
     log_path = exe_dir / "converter.log"
 
-    # Попытка создать файловый обработчик
     try:
         file_handler = RotatingFileHandler(
             str(log_path),
@@ -112,7 +109,6 @@ def setup_logging():
         logger.info(f"Лог-файл: {log_path}")
     except (IOError, OSError) as e:
         print(f"[LOG] Не удалось открыть {log_path}: {e}")
-        # Fallback на Temp
         temp_log = Path(tempfile.gettempdir()) / "converter.log"
         try:
             file_handler = RotatingFileHandler(
@@ -127,20 +123,17 @@ def setup_logging():
         except Exception as fallback_e:
             print(f"[LOG] Не удалось создать лог во временной папке: {fallback_e}")
 
-    # Консольный обработчик
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.WARNING)
     logger.addHandler(console_handler)
 
-    # Информативные логи
     logger.info("Запуск конвертера изображений")
     logger.info(f"Python: {sys.version}")
     logger.info(f"Система: {sys.platform}")
-    logger.debug("PATH: %s", os.environ.get("PATH"))
+    logger.info(f"Текущая версия приложения: {CURRENT_VERSION}")
 
 
-# Хук для необработанных исключений
 def log_unhandled_exception(exc_type, exc_value, exc_traceback):
     if issubclass(exc_type, KeyboardInterrupt):
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -151,8 +144,7 @@ def log_unhandled_exception(exc_type, exc_value, exc_traceback):
 
 sys.excepthook = log_unhandled_exception
 
-
-# ===== Логика автообновления через GitHub =====
+# -------- Обновление через GitHub --------
 
 def parse_version(v: str):
     v = v.strip()
@@ -178,10 +170,8 @@ def get_latest_release_info():
         )
         with urllib.request.urlopen(req, timeout=5) as resp:
             if resp.status != 200:
-                # Не считаем это ошибкой приложения, просто фиксируем инфу
                 logger.info(
-                    f"Проверка обновлений: сервер вернул статус {resp.status}, "
-                    f"обновления пропущены."
+                    f"Проверка обновлений: статус {resp.status}, обновления пропущены."
                 )
                 return None
 
@@ -190,7 +180,6 @@ def get_latest_release_info():
 
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            # Для 404: это чаще всего отсутствие релизов или неверный URL
             logger.info(
                 "Проверка обновлений: релиз не найден (404). "
                 "Возможно, ещё нет опубликованных релизов."
@@ -200,16 +189,13 @@ def get_latest_release_info():
                 f"Проверка обновлений: HTTP {e.code}, обновления пропущены."
             )
     except urllib.error.URLError as e:
-        # Проблемы сети — тоже не критично, просто информируем
         logger.info(
             f"Проверка обновлений: нет доступа к GitHub ({e}). Обновления пропущены."
         )
     except Exception as e:
-        # Любые другие ошибки — логируем как info, чтобы не пугать
         logger.info(
             f"Проверка обновлений: внутренняя ошибка ({type(e).__name__}: {e}). "
-            f"Обновления пропущены.",
-            exc_info=False,
+            f"Обновления пропущены."
         )
 
     return None
@@ -218,7 +204,7 @@ def get_latest_release_info():
 def check_for_updates(parent=None):
     """
     Проверяет GitHub Releases.
-    Если есть новая версия — предлагает скачать и (для .exe) запустить.
+    При любой проблеме тихо выходит, не мешая работе приложения.
     """
     logger = logging.getLogger(__name__)
     info = get_latest_release_info()
@@ -228,13 +214,13 @@ def check_for_updates(parent=None):
     tag = info.get("tag_name") or ""
     latest_version = tag.strip()
     if not latest_version:
-        logger.info("Проверка обновлений: поле tag_name отсутствует, пропускаю.")        
+        logger.info("Проверка обновлений: тег отсутствует, пропускаю.")
         return
 
     if not is_newer_version(latest_version, CURRENT_VERSION):
         logger.info(
-            f"Текущая версия {CURRENT_VERSION}"
-            f"Актуальна (последняя {latest_version})."
+            f"Проверка обновлений: текущая версия {CURRENT_VERSION} "
+            f"актуальна (последняя {latest_version})."
         )
         return
 
@@ -244,7 +230,7 @@ def check_for_updates(parent=None):
     download_url = None
     asset_name = None
 
-    # Ищем .exe для Windows с указанием windows в имени
+    # Ищем .exe для Windows
     for a in assets:
         name = a.get("name", "").lower()
         if name.endswith(".exe") and "windows" in name:
@@ -252,7 +238,7 @@ def check_for_updates(parent=None):
             asset_name = a.get("name")
             break
 
-    # Если подходящий ассет не найден — предлагаем открыть страницу релиза
+    # Если нет подходящего ассета — предлагаем открыть страницу релиза
     if not download_url:
         html_url = info.get("html_url")
         if parent:
@@ -266,12 +252,11 @@ def check_for_updates(parent=None):
             )
             if res == QMessageBox.Yes and html_url:
                 webbrowser.open(html_url)
-        else:
-            if html_url:
-                webbrowser.open(html_url)
+        elif html_url:
+            webbrowser.open(html_url)
         return
 
-    # Спрашиваем пользователя, скачивать ли ассет
+    # Спрашиваем пользователя, скачивать ли
     if parent:
         res = QMessageBox.question(
             parent,
@@ -304,18 +289,15 @@ def check_for_updates(parent=None):
 
         logger.info(f"Обновление скачано: {target_path}")
 
-        # Пытаемся запустить .exe
+        # Пытаемся запустить .exe (Windows)
         try:
             if sys.platform.startswith("win") and str(target_path).lower().endswith(".exe"):
                 os.startfile(str(target_path))
                 logger.info("Запущен установщик обновления")
-
-                # Закрываем текущее приложение, чтобы не мешать обновлению
                 if parent:
                     parent.close()
                 sys.exit(0)
             else:
-                # Если не .exe или не Windows — просто сообщаем путь
                 if parent:
                     QMessageBox.information(
                         parent,
@@ -324,23 +306,23 @@ def check_for_updates(parent=None):
                         f"Запустите его вручную."
                     )
         except Exception as e:
-            logger.error(f"Не удалось запустить обновление: {e}", exc_info=True)
+            logger.info(
+                f"Не удалось автоматически запустить обновление: {e}. "
+                f"Файл: {target_path}"
+            )
             if parent:
-                QMessageBox.warning(
+                QMessageBox.information(
                     parent,
-                    "Ошибка запуска обновления",
-                    f"Файл скачан:\n{target_path}\n\n"
-                    f"Но не удалось запустить автоматически. Запустите вручную."
+                    "Обновление скачано",
+                    f"Файл обновления сохранён:\n{target_path}\n\n"
+                    f"Запустите его вручную."
                 )
     except Exception as e:
-        logger.error(f"Ошибка скачивания обновления: {e}", exc_info=True)
-        if parent:
-            QMessageBox.warning(
-                parent,
-                "Ошибка обновления",
-                f"Не удалось скачать обновление:\n{e}"
-            )
+        logger.info(
+            f"Ошибка при скачивании обновления: {e}. Обновление не выполнено."
+        )
 
+# -------- MainWindow с drag & drop --------
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -348,17 +330,23 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Converter — Конвертер изображений")
         self.resize(900, 650)
 
-        # Центральный виджет
+        # Разрешаем drag&drop на всё окно
+        self.setAcceptDrops(True)
+
         central_widget = QWidget()
+        central_widget.setAcceptDrops(True)
         self.setCentralWidget(central_widget)
 
-        # Основной макет
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
         # Список файлов
         self.file_list = QListWidget()
-        layout.addWidget(QLabel("Добавленные файлы:"))
+        self.file_list.setSelectionMode(self.file_list.ExtendedSelection)
+        self.file_list.setAcceptDrops(True)
+        self.file_list.setDragEnabled(False)
+
+        layout.addWidget(QLabel("Добавленные файлы (можно перетащить сюда):"))
         layout.addWidget(self.file_list)
 
         # Настройки
@@ -376,15 +364,15 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(settings_layout)
 
-        # Формат вывода и папка
+        # Формат вывода
         format_layout = QHBoxLayout()
         format_layout.addWidget(QLabel("Формат вывода:"))
         self.format_selector = QComboBox()
         self.format_selector.addItems(SUPPORTED_FORMATS)
-        self.format_selector.setCurrentText("JPG")  # по умолчанию
+        self.format_selector.setCurrentText("JPG")
         format_layout.addWidget(self.format_selector)
 
-        # Кнопка выбора папки вывода
+        # Папка вывода
         output_layout = QHBoxLayout()
         self.output_button = QPushButton("Выбрать папку для сохранения")
         self.output_button.clicked.connect(self.select_output_folder)
@@ -404,31 +392,104 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.add_button)
         button_layout.addWidget(self.convert_button)
         button_layout.addWidget(self.clear_button)
-
         layout.addLayout(button_layout)
 
-        # Прогресс-бар
+        # Прогресс и статус
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
         layout.addWidget(self.progress_bar)
 
-        # Статус-бар
-        self.status_bar = QLabel("Готов к работе")
+        self.status_bar = QLabel("Готов к работе (можно перетащить файлы в окно)")
         layout.addWidget(self.status_bar)
 
-        # Подключение сигналов
+        # Сигналы
         try:
             self.add_button.clicked.connect(self.on_add_files_clicked)
             self.convert_button.clicked.connect(self.start_conversion)
             self.clear_button.clicked.connect(self.clear_files)
-            logger.info("Сигналы подключены успешно")
+            logging.getLogger(__name__).info("Сигналы подключены успешно")
         except Exception as e:
-            logger.critical(f"Ошибка подключения сигналов: {e}", exc_info=True)
-            QMessageBox.critical(self, "Критическая ошибка", f"Не удалось подключить сигналы: {e}")
+            logging.getLogger(__name__).critical(
+                f"Ошибка подключения сигналов: {e}",
+                exc_info=True
+            )
+            QMessageBox.critical(
+                self,
+                "Критическая ошибка",
+                f"Не удалось подключить сигналы: {e}"
+            )
 
-        self.worker_thread = None
-        self.worker = None
         self.output_dir = None
+
+    # ---------- Drag & Drop ----------
+
+    def dragEnterEvent(self, event):
+        """Разрешаем drag если в данных есть файлы."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        """Обрабатываем перетаскивание файлов/папок в окно."""
+        if not event.mimeData().hasUrls():
+            event.ignore()
+            return
+
+        paths = []
+        for url in event.mimeData().urls():
+            local_path = url.toLocalFile()
+            if not local_path:
+                continue
+            p = Path(local_path)
+            if p.is_file():
+                if self._is_supported_file(p):
+                    paths.append(str(p))
+            elif p.is_dir():
+                # Добавляем файлы из папки (один уровень)
+                for child in p.iterdir():
+                    if child.is_file() and self._is_supported_file(child):
+                        paths.append(str(child))
+
+        if paths:
+            self._add_files_to_list(paths)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def _is_supported_file(self, path: Path) -> bool:
+        return path.suffix.lower() in SUPPORTED_EXTS
+
+    def _add_files_to_list(self, file_paths):
+        logger = logging.getLogger(__name__)
+        added = 0
+
+        # Собираем уже добавленные пути, чтобы не дублировать
+        existing = {self.file_list.item(i).text() for i in range(self.file_list.count())}
+
+        for path in file_paths:
+            if not os.path.isfile(path):
+                logger.warning(f"Файл не существует (пропуск): {path}")
+                continue
+            if path in existing:
+                continue
+            self.file_list.addItem(path)
+            existing.add(path)
+            added += 1
+
+        if added:
+            self.status_bar.setText(f"Добавлено файлов: {added}")
+            logger.info(f"Добавлено через drag&drop: {added} файлов")
+        else:
+            self.status_bar.setText("Файлы не добавлены (возможно, уже в списке или не поддерживаются)")
+
+    # ---------- Остальной функционал ----------
 
     def select_output_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Выберите папку для сохранения")
@@ -438,9 +499,9 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def on_add_files_clicked(self):
+        logger = logging.getLogger(__name__)
         try:
             logger.info("=== НАЧАЛО on_add_files_clicked ===")
-
             file_paths, _ = QFileDialog.getOpenFileNames(
                 self,
                 "Выбрать изображения",
@@ -448,24 +509,11 @@ class MainWindow(QMainWindow):
                 "Изображения (*.jpg *.jpeg *.png *.heic *.heif *.tiff *.bmp *.webp *.gif *.ico)"
             )
 
-            logger.debug(f"Получено путей: {len(file_paths)}")
-
             if not file_paths:
-                logger.info("Нет выбранных файлов")
+                logger.info("Пользователь не выбрал файлы")
                 return
 
-            added_count = 0
-            for path in file_paths:
-                logger.debug(f"Проверяю файл: {path} → существует: {os.path.exists(path)}")
-                if not os.path.isfile(path):
-                    logger.warning(f"Файл не найден: {path}")
-                    continue
-
-                self.file_list.addItem(path)
-                added_count += 1
-
-            self.status_bar.setText(f"Добавлено {added_count} файлов")
-            logger.info(f"Завершено добавление {added_count} файлов")
+            self._add_files_to_list(file_paths)
 
         except Exception as e:
             logger.critical(
@@ -478,22 +526,10 @@ class MainWindow(QMainWindow):
                 f"Произошла ошибка: {e}\nПроверьте лог converter.log для деталей."
             )
 
-    def save_heif_safe(
-        self,
-        img: Image.Image,
-        output_path: Path,
-        quality: int = 85,
-        fallback_format: str = "JPG"
-    ) -> bool:
-        """
-        Безопасно сохраняет изображение в HEIC/HEIF, если библиотека поддерживает это.
-        При ошибке сохраняет fallback в указанный формат.
-        Возвращает True при успешном сохранении HEIC, False если использован fallback.
-        """
+    def save_heif_safe(self, img: Image.Image, output_path: Path,
+                       quality: int = 85, fallback_format: str = "JPG") -> bool:
         logger = logging.getLogger(__name__)
-
         try:
-            # Старый API (до 1.0): есть write_heif
             if hasattr(pillow_heif, "write_heif"):
                 heif_data = pillow_heif.from_pillow(img)
                 pillow_heif.write_heif(
@@ -504,122 +540,76 @@ class MainWindow(QMainWindow):
                 )
                 logger.info(f"Сохранено в HEIC (через write_heif): {output_path}")
                 return True
-
-            # Новый API (1.x.x): есть from_pillow, но нет write_heif
             elif hasattr(pillow_heif, "from_pillow"):
                 logger.warning("write_heif() отсутствует. Прямая запись HEIC невозможна.")
-                fallback_path = output_path.with_suffix(f".{fallback_format.lower()}")
-                img.convert("RGB").save(
-                    fallback_path,
-                    fallback_format.upper(),
-                    quality=quality,
-                    optimize=True
-                )
-                logger.info(
-                    f"Сохранено fallback ({fallback_format.upper()}): {fallback_path}"
-                )
-                return False
-
             else:
-                logger.warning(
-                    "pillow-heif не поддерживает сохранение HEIC в этой версии."
-                )
-                fallback_path = output_path.with_suffix(f".{fallback_format.lower()}")
-                img.convert("RGB").save(
-                    fallback_path,
-                    fallback_format.upper(),
-                    quality=quality,
-                    optimize=True
-                )
-                logger.info(
-                    f"Сохранено fallback ({fallback_format.upper()}): {fallback_path}"
-                )
-                return False
-
+                logger.warning("pillow-heif не поддерживает сохранение HEIC в этой версии.")
         except Exception as e:
-            logger.warning(f"Ошибка при сохранении HEIC: {e}. Использую fallback.")
-            try:
-                fallback_path = output_path.with_suffix(f".{fallback_format.lower()}")
-                img.convert("RGB").save(
-                    fallback_path,
-                    fallback_format.upper(),
-                    quality=quality,
-                    optimize=True
-                )
-                logger.info(
-                    f"Сохранено fallback ({fallback_format.upper()}): {fallback_path}"
-                )
-            except Exception as e2:
-                logger.error(f"Ошибка fallback сохранения: {e2}")
-            return False
+            logger.warning(f"Ошибка при сохранении HEIC: {e}. Будет использован fallback.")
+
+        # Fallback
+        try:
+            fb = output_path.with_suffix(f".{fallback_format.lower()}")
+            img.convert("RGB").save(
+                fb,
+                fallback_format.upper(),
+                quality=quality,
+                optimize=True
+            )
+            logger.info(f"Сохранено fallback ({fallback_format.upper()}): {fb}")
+        except Exception as e2:
+            logger.error(f"Ошибка fallback сохранения: {e2}")
+        return False
 
     @pyqtSlot()
     def start_conversion(self):
+        logger = logging.getLogger(__name__)
         try:
             logger.info("=== НАЧАЛО start_conversion ===")
 
             if self.file_list.count() == 0:
-                logger.warning("Нет файлов для конвертации")
-                QMessageBox.warning(
-                    self,
-                    "Предупреждение",
-                    "Добавьте файлы перед конвертацией"
-                )
+                QMessageBox.warning(self, "Предупреждение", "Добавьте файлы перед конвертацией")
                 return
 
             quality = self.quality_spin.value()
             overwrite = self.overwrite_checkbox.isChecked()
             out_format = self.format_selector.currentText().upper()
 
-            logger.debug(
-                f"Настройки конвертации: качество={quality}, "
-                f"перезапись={overwrite}, формат={out_format}"
-            )
-
             # Сбор валидных путей
             file_paths = []
             for i in range(self.file_list.count()):
-                file_path = self.file_list.item(i).text()
-                if os.path.isfile(file_path):
-                    file_paths.append(file_path)
+                p = self.file_list.item(i).text()
+                if os.path.isfile(p):
+                    file_paths.append(p)
                 else:
-                    logger.warning(f"Файл не существует (пропущен): {file_path}")
+                    logger.warning(f"Файл не существует (пропуск): {p}")
 
             if not file_paths:
-                logger.error("Нет валидных файлов для конвертации")
-                QMessageBox.critical(
-                    self,
-                    "Ошибка",
-                    "Нет доступных файлов для конвертации"
-                )
+                QMessageBox.critical(self, "Ошибка", "Нет доступных файлов для конвертации")
                 return
 
             self.progress_bar.setRange(0, len(file_paths))
             self.progress_bar.setValue(0)
 
-            # Регистрируем поддержку HEIC/HEIF
+            # Регистрация HEIF/HEIC
             try:
                 pillow_heif.register_heif_opener()
                 logger.info("Поддержка HEIC/HEIF активирована")
             except Exception as e:
-                logger.warning(f"Не удалось зарегистрировать pillow-heif: {e}")
+                logger.info(f"Не удалось зарегистрировать pillow-heif: {e}")
 
             for idx, path in enumerate(file_paths):
                 input_path = Path(path)
                 output_dir = self.output_dir or input_path.parent
-
                 try:
                     output_dir.mkdir(parents=True, exist_ok=True)
                 except Exception as e:
-                    logger.warning(
-                        f"Не удалось создать папку {output_dir}: {e}"
-                    )
+                    logger.warning(f"Не удалось создать папку {output_dir}: {e}")
 
                 ext = out_format.lower()
                 output_name = f"{input_path.stem}.{ext}"
                 output_path = output_dir / output_name
 
-                # Уникальное имя при запрете перезаписи
                 if output_path.exists() and not overwrite:
                     i = 1
                     while True:
@@ -629,25 +619,23 @@ class MainWindow(QMainWindow):
                             break
                         i += 1
 
-                # Открытие изображения
+                # Открытие
                 try:
                     with Image.open(input_path) as im:
                         img = im.copy()
                 except UnidentifiedImageError as e:
-                    logger.error(
-                        f"Не удалось определить формат изображения {path}: {e}"
-                    )
+                    logger.error(f"Не удалось определить формат {path}: {e}")
                     QMessageBox.warning(
                         self,
                         "Ошибка конвертации",
-                        f"Формат не поддерживается:\n{path}"
+                        f"Формат не поддерживается или файл повреждён:\n{path}"
                     )
                     continue
                 except Exception as e:
-                    logger.error(f"Ошибка открытия файла {path}: {e}")
+                    logger.error(f"Ошибка открытия {path}: {e}")
                     continue
 
-                # Подготовка RGB с учётом прозрачности
+                # Обработка прозрачности
                 try:
                     if img.mode in ("RGBA", "LA") or (
                         img.mode == "P" and "transparency" in img.info
@@ -660,9 +648,7 @@ class MainWindow(QMainWindow):
                     else:
                         rgb = img.convert("RGB")
                 except Exception as e:
-                    logger.debug(
-                        f"Ошибка при конвертации в RGB: {e}"
-                    )
+                    logger.debug(f"Ошибка при конвертации в RGB: {e}")
                     rgb = img.convert("RGB")
 
                 # Параметры сохранения
@@ -672,47 +658,28 @@ class MainWindow(QMainWindow):
                 if out_format == "PNG":
                     save_kwargs["optimize"] = True
 
-                # Сохранение
                 try:
                     if out_format in ("HEIC", "HEIF"):
-                        success = self.save_heif_safe(
-                            rgb,
-                            output_path,
-                            quality=quality,
-                            fallback_format="JPG"
-                        )
-                        if not success:
-                            logger.warning(
-                                f"Формат HEIC/HEIF недоступен, "
-                                f"использован fallback для {input_path.name}"
-                            )
+                        self.save_heif_safe(rgb, output_path, quality=quality, fallback_format="JPG")
                     else:
                         fmt = "JPEG" if out_format in ("JPG", "JPEG") else out_format
                         rgb.save(output_path, fmt, **save_kwargs)
                         logger.info(f"Сохранено: {output_path}")
                 except Exception as e:
-                    logger.error(
-                        f"Ошибка сохранения {output_path}: {e}",
-                        exc_info=True
-                    )
+                    logger.error(f"Ошибка сохранения {output_path}: {e}", exc_info=True)
                     QMessageBox.warning(
                         self,
                         "Ошибка",
                         f"Ошибка при сохранении:\n{output_path}\n{e}"
                     )
 
-                # Обновление прогресса
                 self.progress_bar.setValue(idx + 1)
                 self.status_bar.setText(
                     f"Конвертировано {idx + 1}/{len(file_paths)}"
                 )
 
             self.status_bar.setText("Конвертация завершена")
-            QMessageBox.information(
-                self,
-                "Готово",
-                "Конвертация выполнена успешно!"
-            )
+            QMessageBox.information(self, "Готово", "Конвертация выполнена успешно!")
 
         except Exception as e:
             logger.critical(
@@ -728,6 +695,7 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot()
     def clear_files(self):
+        logger = logging.getLogger(__name__)
         try:
             logger.info("=== НАЧАЛО clear_files ===")
             self.file_list.clear()
@@ -737,26 +705,60 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.critical(f"Ошибка в clear_files: {e}", exc_info=True)
 
+        # Можно не бросать исключение, чтобы приложение не падало
+        # raise e  # не нужно, логируем и продолжаем
 
-# Основной запуск
-if __name__ == "__main__":
+    # Если других методов нет — на этом класс MainWindow заканчивается.
+    # Убедись, что ниже нет отступа 4 пробела, иначе код попадёт внутрь класса.
+
+
+def main():
+    # Настройка логирования
     setup_logging()
     logger = logging.getLogger(__name__)
+    logger.info("=== Запуск приложения Converter ===")
 
+    # Регистрация pillow-heif (если установлено)
     try:
-        app = QApplication(sys.argv)
-
-        window = MainWindow()
-        window.show()
-        logger.info("Приложение запущено")
-
-        # Проверка обновлений при запуске
-        check_for_updates(parent=window)
-
-        sys.exit(app.exec_())
+        pillow_heif.register_heif_opener()
+        logger.info("pillow-heif успешно инициализирован")
     except Exception as e:
-        logger.critical(
-            f"Критическая ошибка при запуске приложения: {e}",
-            exc_info=True
-        )
-        sys.exit(1)
+        # Не критично, просто логируем
+        logger.warning(f"Не удалось инициализировать pillow-heif: {e}")
+
+    # Создание приложения
+    app = QApplication(sys.argv)
+
+    # Создание и показ главного окна
+    window = MainWindow()
+    window.show()
+    logger.info("Главное окно показано")
+
+    # Попытка проверки обновлений (если твой код её содержит)
+    try:
+        # Если у тебя реализована функция check_for_updates, раскомментируй:
+        # check_for_updates(parent=window)
+        pass
+    except Exception as e:
+        logger.warning(f"Ошибка при проверке обновлений: {e}", exc_info=True)
+
+    # Запуск цикла приложения
+    try:
+        exit_code = app.exec_()
+        logger.info(f"Приложение завершило работу с кодом {exit_code}")
+        return exit_code
+    except Exception as e:
+        logger.critical(f"Критическая ошибка в event loop: {e}", exc_info=True)
+        # Пробросим, чтобы поймал внешний try/except
+        raise
+
+
+if __name__ == "__main__":
+    import traceback
+    try:
+        sys.exit(main())
+    except Exception as e:
+        # Этот блок нужен именно для exe, чтобы увидеть причину падения
+        print("FATAL ERROR:", e)
+        traceback.print_exc()
+        input("Нажмите Enter для выхода...")        
