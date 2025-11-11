@@ -30,47 +30,47 @@ SUPPORTED_EXTS = {f".{ext.lower()}" for ext in SUPPORTED_FORMATS}
 
 # -------- Определение версии --------
 
-def detect_current_version() -> str:
-    """
-    Определяет текущую версию приложения:
-    1) Если есть git-репозиторий — берёт последний тег через git.
-    2) Если есть файл version.txt рядом с main.py / exe — читает из него.
-    3) Иначе возвращает "0.0.0".
-    """
-    # 1. Попытка через git (запуск из исходников, не frozen)
-    try:
-        if not getattr(sys, "frozen", False):
-            from subprocess import check_output
-            base_dir = Path(__file__).resolve().parent
-            cmd = ["git", "-C", str(base_dir), "describe", "--tags", "--abbrev=0"]
-            with open(os.devnull, "wb") as devnull:
-                tag = check_output(cmd, stderr=devnull).decode("utf-8").strip()
-            if tag:
-                return tag  # parse_version уберёт префикс v при сравнении
-    except Exception:
-        pass
+# def detect_current_version() -> str:
+#     """
+#     Определяет текущую версию приложения:
+#     1) Если есть git-репозиторий — берёт последний тег через git.
+#     2) Если есть файл version.txt рядом с main.py / exe — читает из него.
+#     3) Иначе возвращает "0.0.0".
+#     """
+#     # 1. Попытка через git (запуск из исходников, не frozen)
+#     try:
+#         if not getattr(sys, "frozen", False):
+#             from subprocess import check_output
+#             base_dir = Path(__file__).resolve().parent
+#             cmd = ["git", "-C", str(base_dir), "describe", "--tags", "--abbrev=0"]
+#             with open(os.devnull, "wb") as devnull:
+#                 tag = check_output(cmd, stderr=devnull).decode("utf-8").strip()
+#             if tag:
+#                 return tag  # parse_version уберёт префикс v при сравнении
+#     except Exception:
+#         pass
 
-    # 2. Попытка через version.txt
-    try:
-        if getattr(sys, "frozen", False):
-            # Для PyInstaller onefile данные лежат в sys._MEIPASS
-            base_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
-        else:
-            base_dir = Path(__file__).resolve().parent
+#     # 2. Попытка через version.txt
+#     try:
+#         if getattr(sys, "frozen", False):
+#             # Для PyInstaller onefile данные лежат в sys._MEIPASS
+#             base_dir = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+#         else:
+#             base_dir = Path(__file__).resolve().parent
 
-        version_file = base_dir / "version.txt"
-        if version_file.is_file():
-            v = version_file.read_text(encoding="utf-8").strip()
-            if v:
-                return v
-    except Exception:
-        pass
+#         version_file = base_dir / "version.txt"
+#         if version_file.is_file():
+#             v = version_file.read_text(encoding="utf-8").strip()
+#             if v:
+#                 return v
+#     except Exception:
+#         pass
 
-    # 3. Фоллбек
-    return "0.0.0"
+#     # 3. Фоллбек
+#     return "0.0.0"
 
 
-CURRENT_VERSION = detect_current_version()
+CURRENT_VERSION = 1.0.1.3
 GITHUB_API_LATEST = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/releases/latest"
 
 # -------- Логирование --------
